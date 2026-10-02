@@ -30,7 +30,7 @@ fun logLevelOfWire(text: String): LogLevel? = when (text.trim().lowercase()) {
 
 private val credentialKeyValue = Regex(
     "(?i)([\\w.\\-]*(?:api[_-]?key|key|token|secret|passwd|password|pwd|authorization|auth|credential)[\\w.\\-]*\\s*[=:]\\s*)" +
-        "(\"[^\"]*\"|'[^']*'|[^\\s,;&\"']+)"
+        "(\"[^\"]*\"|'[^']*'|(?!(?i:bearer|basic)\\b)[^\\s,;&\"']+)"
 )
 private val credentialBearer = Regex("(?i)(\\b(?:bearer|basic)\\s+)([A-Za-z0-9\\-._~+/]+=*)")
 private val credentialSk = Regex("\\bsk-[A-Za-z0-9_\\-]{8,}")

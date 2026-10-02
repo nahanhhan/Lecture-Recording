@@ -197,7 +197,7 @@ private fun logFiles(activity: MainActivity): List<File> =
 private fun currentLogKb(activity: MainActivity): Long =
     logFiles(activity).sumOf { it.length() } / 1024
 
-/** 归并 `files/log/*.log` 为 `cacheDir/exports/lecture-log_<时间戳>.log`（按行时间戳排序）；无内容返回 null。 */
+/** 归并 `files/log` 目录下全部 `.log` 文件为 `cacheDir/exports/lecture-log_<时间戳>.log`（按行时间戳排序）；无内容返回 null。 */
 private fun exportLogs(activity: MainActivity): File? {
     val lines = logFiles(activity).flatMap { it.readLines() }.sortedBy { it.take(23) }
     if (lines.isEmpty()) return null

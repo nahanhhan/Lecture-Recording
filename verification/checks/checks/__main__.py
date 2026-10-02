@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import json_assets, model_sources, version_consistency
+from . import json_assets, kotlin_comments, log_redaction, model_sources, version_consistency
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -20,6 +20,8 @@ CHECKS: list[tuple[str, CheckFn]] = [
     ("版本一致性", version_consistency.run),
     ("JSON 资产", json_assets.run),
     ("下载源", model_sources.run),
+    ("Kotlin 注释配对", kotlin_comments.run),
+    ("日志脱敏规则", log_redaction.run),
 ]
 
 
