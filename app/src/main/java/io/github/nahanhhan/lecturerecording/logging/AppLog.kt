@@ -1,5 +1,6 @@
 package io.github.nahanhhan.lecturerecording.logging
 
+import android.app.Application
 import io.github.nahanhhan.lecture.core.LogEventLevel
 import io.github.nahanhhan.lecture.core.LogLevel
 import java.io.File
@@ -9,6 +10,20 @@ object AppLog {
     private val lock = Any()
     private var writer: LogWriter? = null
     private var store: LogLevelStore? = null
+
+    /**
+     * 按进程名推导来源标识：`:asr` 进程为 "asr"，主进程为 "main"。
+     * 日志文件名为 `files/log/<来源>.log`，导出条目以此区分来源进程。
+     */
+    fun sourceNameOf(processName: String): String {
+        val idx = processName.indexOf(':')
+        return if (idx >= 0) processName.substring(idx + 1) else "main"
+    }
+
+    /** 两进程共用的初始化入口：按当前进程名确定来源标识。 */
+    fun init(app: Application) {
+        init(app.filesDir, sourceNameOf(app.getProcessName()))
+    }
 
     /**
      * 初始化日志：档位持久化于 `filesDir/log/level`，日志写入 `filesDir/log/<source>.log`

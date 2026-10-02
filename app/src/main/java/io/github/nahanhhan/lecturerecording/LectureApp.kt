@@ -6,6 +6,7 @@ import io.github.nahanhhan.lecturerecording.data.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import java.io.File
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.WavFile
 
 data class RecordingState(val lessonId: String? = null, val status: String = "idle", val samples: Long = 0,
@@ -40,6 +41,8 @@ class LectureApp : Application() {
     lateinit var graph: AppGraph
     override fun onCreate() {
         super.onCreate()
+        // Both processes log to files/log/<process>.log.
+        AppLog.init(this)
         // ASR process owns only its recognizer; it must not run main-process recovery.
         if (!getProcessName().endsWith(":asr")) graph = AppGraph(this)
     }
