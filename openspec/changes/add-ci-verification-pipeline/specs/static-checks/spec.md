@@ -25,7 +25,7 @@
 - **THEN** 开发者在推送进入 CI 之前即获得失败项与涉及文件
 
 ### Requirement: 覆盖最小检查集
-检查 SHALL 至少覆盖：版本号与文档表述一致性、JSON 资产可解析且相互一致、OpenSpec 变更工件结构完整。检查项 MUST 保持最小可用集，按需增补。
+检查 SHALL 至少覆盖：版本号与文档表述一致性、JSON 资产可解析且相互一致。检查项 MUST 保持最小可用集，按需增补；OpenSpec 工件结构校验由 `openspec` 官方命令承担，MUST NOT 重复实现。
 
 #### Scenario: 版本号与文档不一致
 - **WHEN** `app/build.gradle.kts` 的 `versionName` 与 README 声明的版本不一致

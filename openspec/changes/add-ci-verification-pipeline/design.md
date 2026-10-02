@@ -34,8 +34,8 @@
    - 理由：用户要求与验收报告隔离；`scripts/` 语义是「固定依赖准备」，检查是验证职责，不混放；局部 `pyproject.toml` 不污染 Gradle 根工程。
    - 备选：根目录 `pyproject.toml`——让纯 Android 成员多一个无关顶层文件。
 
-3. **首批检查项取最小集**：版本号（`versionName`）与 README 一致性、JSON 资产（`tool-definition.json` 与 `docs/openai-tool-calling/` 示例）可解析且一致、OpenSpec 变更工件结构完整。
-   - 理由：Python 标准库即可实现、毫秒级、对应已存在的漂移风险（版本号散落多处文档）。
+3. **首批检查项取最小集**：版本号（`versionName`）与 README 一致性、JSON 资产（`tool-definition.json` 与 `docs/openai-tool-calling/` 示例）可解析且一致。OpenSpec 工件结构校验交给 `openspec validate` 等官方命令，不重复实现。
+   - 理由：Python 标准库即可实现、毫秒级、对应已存在的漂移风险（版本号散落多处文档）；OpenSpec 结构已有官方命令，自写检查是重复造轮子。
    - 备选：PLAN 式全量校验矩阵——维护成本高、易与代码漂移，明确不做。
 
 4. **task 分批约定写进 tasks.md 结构**：每批 2–4 个任务、单批对应一次可辨识的 CI 结果，批间可独立回滚。
