@@ -24,6 +24,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.cloud.CloudClient
 import io.github.nahanhhan.lecturerecording.data.CloudSettings
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.models.*
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
@@ -43,6 +44,7 @@ import java.io.File
     var source by remember { mutableStateOf(graph.settings.downloadSource) }
     var message by remember { mutableStateOf("") }
     var testing by remember { mutableStateOf(false) }
+    var logLevel by remember { mutableStateOf(AppLog.level()) }
     val download by graph.download.collectAsStateWithLifecycle()
     val recording by graph.recording.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -125,6 +127,36 @@ import java.io.File
         Text("录音期间请保留持续通知。在澎湃 OS / ColorOS 中允许后台运行，并检查省电模式。系统强制停止或关机后，再次打开可查看已保存资料。")
         OutlinedButton(onClick = { runCatching { activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }) { Text("打开电池设置") }
         OutlinedButton(onClick = { activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}"))) }) { Text("打开应用系统设置") }
+        HorizontalDivider()
+        Text("日志", style = MaterialTheme.typography.titleLarge)
+        Text("默认关闭。Info 记录关键事件并自动脱敏凭据；Debug 记录全部细节。导出后发给开发者排查问题。", style = MaterialTheme.typography.bodyMedium)
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = logLevel == LogLevel.NONE,
+                onClick = { logLevel = LogLevel.NONE; AppLog.setLevel(LogLevel.NONE) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                icon = {},
+                label = { Text("None") }
+            )
+            SegmentedButton(
+                selected = logLevel == LogLevel.INFO,
+                onClick = { logLevel = LogLevel.INFO; AppLog.setLevel(LogLevel.INFO) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                icon = {},
+                label = { Text("Info") }
+            )
+            SegmentedButton(
+                selected = logLevel == LogLevel.DEBUG,
+                onClick = { logLevel = LogLevel.DEBUG; AppLog.setLevel(LogLevel.DEBUG) },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                icon = {},
+                label = { Text("Debug") }
+            )
+        }
+        if (logLevel == LogLevel.DEBUG) Text(
+            "Debug 档会记录敏感信息（如 API Key 与转写内容），抓问题后请切回 Info 或 None。",
+            color = MaterialTheme.colorScheme.error
+        )
         Text("版本 0.1.0-alpha · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
     }
 }
