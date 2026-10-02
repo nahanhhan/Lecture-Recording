@@ -1,5 +1,6 @@
 package io.github.nahanhhan.lecturerecording.recording
 
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import java.io.File
 import java.io.RandomAccessFile
 
@@ -28,7 +29,9 @@ class WavFile(val file: File) : AutoCloseable {
         fun repair(file: File): Long = RandomAccessFile(file, "rw").use { output ->
             if (output.length() < 44) return 0
             val samples = (output.length() - 44) / 2
-            output.setLength(44 + samples * 2); header(output, samples); output.fd.sync(); samples
+            output.setLength(44 + samples * 2); header(output, samples); output.fd.sync()
+            AppLog.i("WavFile", "修复文件头 file=${file.name} 样本=$samples")
+            samples
         }
         fun write(file: File, samples: ShortArray) { WavFile(file).use { it.append(samples, samples.size) } }
         fun read(file: File): FloatArray = RandomAccessFile(file, "r").use { input ->

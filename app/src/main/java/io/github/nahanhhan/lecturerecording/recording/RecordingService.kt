@@ -13,6 +13,7 @@ import androidx.room.withTransaction
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.asr.AsrClient
 import io.github.nahanhhan.lecturerecording.data.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
@@ -40,16 +41,18 @@ class RecordingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.i("RecordingService", "服务创建")
         wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:recording").apply { setReferenceCounted(false) }
     }
     override fun onBind(intent: Intent?) = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            PAUSE -> paused.set(true)
-            RESUME -> paused.set(false)
-            STOP -> stopping.set(true)
+            PAUSE -> { paused.set(true); AppLog.i("RecordingService", "暂停录音") }
+            RESUME -> { paused.set(false); AppLog.i("RecordingService", "继续录音") }
+            STOP -> { stopping.set(true); AppLog.i("RecordingService", "收到停止指令") }
             START, DRAIN -> {
                 if (running) return START_NOT_STICKY
+                AppLog.i("RecordingService", if (intent.action == DRAIN) "恢复未完成转写" else "开始录音")
                 foreground("准备录音")
                 running = true
                 worker = scope.launch {
@@ -57,6 +60,7 @@ class RecordingService : Service() {
                     try { runRecording(intent) }
                     catch (cancelled: CancellationException) { throw cancelled }
                     catch (error: Exception) {
+                        AppLog.e("RecordingService", "录音中断", error)
                         lessonId?.let { graph.dao.setStatus(it, "interrupted", error.message ?: "录音中断") }
                         graph.recording.update { it.copy(status = "interrupted", warning = error.message ?: "录音中断") }
                     } finally {
@@ -80,6 +84,7 @@ class RecordingService : Service() {
         graph.recording.value = RecordingState(lesson.id, if (intent.action == DRAIN) "processing" else "recording", lesson.samples)
         val clock = SampleClock(initialSamples = lesson.samples)
         val modelReady = File(filesDir, "models/${lesson.modelId}/installed.json").exists()
+        AppLog.i("RecordingService", "录音课堂 lesson=${lesson.id} 模型=${lesson.modelId} 模型已安装=$modelReady")
         asr = AsrClient(this@RecordingService)
         if (!modelReady) graph.recording.update { it.copy(warning = "模型尚未安装，音频仍正常保存") }
         val consumer = launch {
@@ -101,13 +106,17 @@ class RecordingService : Service() {
                         }
                     }
                     if (recognized == null) throw failure ?: IllegalStateException("识别失败")
-                    if (work.final) graph.database.withTransaction {
-                        graph.dao.finishSegment(work.segmentId, recognized!!)
-                        graph.dao.revise(lesson.id)
+                    if (work.final) {
+                        graph.database.withTransaction {
+                            graph.dao.finishSegment(work.segmentId, recognized!!)
+                            graph.dao.revise(lesson.id)
+                        }
+                        AppLog.i("RecordingService", "分段转写完成 segment=${work.segmentId}")
                     }
                     else if (work.segmentId !in finalized) graph.recording.update { it.copy(preview = recognized!!) }
                 } catch (error: Exception) {
                     if (error is CancellationException && error !is TimeoutCancellationException) throw error
+                    AppLog.e("RecordingService", "分段转写失败 segment=${work.segmentId}", error)
                     if (work.final) graph.dao.failSegment(work.segmentId, error.message ?: "识别失败")
                     graph.recording.update { it.copy(warning = error.message ?: "识别失败，音频已保存") }
                 } finally {
@@ -139,6 +148,7 @@ class RecordingService : Service() {
             WavFile.write(file, window.samples)
             if (window.final) {
                 finalized += id
+                AppLog.i("RecordingService", "分段完成 segment=$id 时长=${window.samples.size * 1000 / 16000}ms")
                 graph.dao.putSegment(SegmentEntity(id, lesson.id, window.startSample * 1000 / 16000,
                     (window.startSample + window.samples.size) * 1000 / 16000, file.path,
                     status = if (modelReady) "pending" else "error", error = if (modelReady) "" else "模型尚未准备好"))
@@ -165,6 +175,7 @@ class RecordingService : Service() {
                     while (isActive && !stopping.get()) {
                         if (paused.get()) {
                             if (!wasPaused) {
+                                AppLog.i("RecordingService", "录音暂停 samples=${clock.samples}")
                                 audio!!.stop(); segmenter.finish()?.let { submit(it) }
                                 chunk?.close(); chunk?.let { graph.dao.setChunkSamples(chunkRecord!!.id, it.samples) }; chunk = null
                                 graph.dao.setSamples(lesson.id, clock.samples)
@@ -176,6 +187,7 @@ class RecordingService : Service() {
                             delay(50); continue
                         }
                         if (wasPaused) {
+                            AppLog.i("RecordingService", "录音恢复")
                             audio!!.startRecording(); wake?.acquire(10 * 60 * 1000L)
                             graph.dao.setStatus(lesson.id, "recording"); graph.recording.update { it.copy(status = "recording") }
                             foreground("正在录音"); wasPaused = false
@@ -207,9 +219,11 @@ class RecordingService : Service() {
                 }
             }
             graph.dao.setStatus(lesson.id, "processing"); graph.recording.update { it.copy(status = "processing") }
+            AppLog.i("RecordingService", "录音结束，完成剩余转写 lesson=${lesson.id}")
             foreground("正在完成剩余转写")
             queue.close(); consumer.join()
             graph.dao.setStatus(lesson.id, "completed")
+            AppLog.i("RecordingService", "全部转写完成 lesson=${lesson.id}")
         } finally { renewal.cancel(); queue.close(); consumer.cancel() }
     }
     private fun releaseWake() { if (wake?.isHeld == true) wake?.release() }
@@ -223,10 +237,12 @@ class RecordingService : Service() {
     }
     override fun onDestroy() {
         stopping.set(true); scope.cancel(); runCatching { audio?.stop() }; releaseWake()
+        AppLog.i("RecordingService", "服务销毁")
         lessonId?.let { id -> graph.scope.launch {
             val lesson = graph.dao.lesson(id)
             if (lesson?.status in setOf("recording", "paused", "processing")) graph.dao.setStatus(id, "interrupted", "录音服务已中断，已保存音频可恢复")
         } }
+        AppLog.flush()
         super.onDestroy()
     }
     companion object {

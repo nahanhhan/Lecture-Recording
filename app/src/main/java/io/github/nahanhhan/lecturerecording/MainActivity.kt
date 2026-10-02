@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.RecordingService
 import io.github.nahanhhan.lecturerecording.ui.*
 import io.github.nahanhhan.lecture.core.formatTime
@@ -38,20 +39,27 @@ class MainActivity : ComponentActivity() {
     private var pendingRecording: Intent? = null
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         val intent = pendingRecording; pendingRecording = null
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && intent != null)
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED && intent != null) {
+            AppLog.i("MainActivity", "权限已授予，启动录音服务")
             ContextCompat.startForegroundService(this, intent)
-        else Toast.makeText(this, "需要麦克风权限才能录音", Toast.LENGTH_LONG).show()
+        } else {
+            AppLog.e("MainActivity", "麦克风权限被拒绝，无法录音")
+            Toast.makeText(this, "需要麦克风权限才能录音", Toast.LENGTH_LONG).show()
+        }
     }
     fun beginRecording(intent: Intent) {
+        AppLog.i("MainActivity", "请求开始录音 action=${intent.action}")
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
             ContextCompat.startForegroundService(this, intent)
         else {
+            AppLog.i("MainActivity", "麦克风权限未授予，请求权限")
             pendingRecording = intent
             permissions.launch(if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS) else arrayOf(Manifest.permission.RECORD_AUDIO))
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AppLog.i("MainActivity", "页面创建")
         setContent { LectureTheme { LectureRoot(this, graph) } }
     }
 }
