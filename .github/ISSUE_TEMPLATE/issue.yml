@@ -1,0 +1,57 @@
+name: 新建 Issue
+description: 报告缺陷或提出新功能建议
+title: "[Type]: "
+labels: []
+body:
+  - type: dropdown
+    id: issue-type
+    attributes:
+      label: Issue 类型
+      description: 选择当前 issue 的类型
+      options:
+        - bug
+        - feat
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 优先级
+      description: 选择当前 issue 的优先级
+      options:
+        - 高
+        - 中
+        - 低
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 描述
+      description: 详细说明该 issue 的内容（缺陷现象或功能需求）
+      placeholder: 请描述遇到的问题或期望的功能...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro-steps
+    attributes:
+      label: 复现步骤 / 补充信息
+      description: （可选）如果是 bug，请提供复现步骤、期望行为与实际行为；如果是 feat，可补充使用场景
+      placeholder: |
+        1. 打开...
+        2. 点击...
+        3. 出现...
+    validations:
+      required: false
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: 环境信息
+      description: （可选）设备型号、系统版本、App 版本等
+      placeholder: 例如：Pixel 7 / Android 14 / v1.0.0
+    validations:
+      required: false
