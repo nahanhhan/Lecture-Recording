@@ -11,6 +11,7 @@ import androidx.core.app.ServiceCompat
 import androidx.room.withTransaction
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.data.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.decodeFromString
@@ -37,8 +38,10 @@ class NotesService : Service() {
                 val job = intent?.getStringExtra("job_id")?.let { requireNotNull(graph.dao.job(it)) }
                     ?: createJob(requireNotNull(intent?.getStringExtra("lesson_id")))
                 currentJobId = job.id
+                AppLog.i("NotesService", "整理任务开始 job=${job.id} lesson=${job.lessonId}")
                 runJob(job, settings)
             } catch (error: Exception) {
+                AppLog.e("NotesService", "整理失败 job=$currentJobId", error)
                 withContext(NonCancellable) {
                     currentJobId?.let { graph.dao.jobStatus(it, "waiting", if (error is CancellationException) "任务已暂停，可手动继续" else error.message ?: "整理失败，可手动重试") }
                 }
@@ -56,7 +59,9 @@ class NotesService : Service() {
             graph.settings.glossary.split(',', '，', '\n').map { it.trim() }.filter { it.isNotBlank() }, segments, photos)
         check(batches.isNotEmpty()) { "没有可整理的文字或照片" }
         val job = JobEntity(UUID.randomUUID().toString(), lessonId, lesson.revision, protocolJson.encodeToString(batches), createdAt = System.currentTimeMillis())
-        graph.dao.putJob(job); job
+        graph.dao.putJob(job)
+        AppLog.i("NotesService", "创建整理任务 job=${job.id} 批次=${batches.size}")
+        job
     }
     private suspend fun runJob(job: JobEntity, settings: CloudSettings) {
         val batches = protocolJson.decodeFromString<List<Batch>>(job.snapshotJson)
@@ -67,6 +72,7 @@ class NotesService : Service() {
             currentCoroutineContext().ensureActive()
             check(graph.dao.lesson(job.lessonId)?.revision == job.revision) { "课堂原稿已修改，请发起新的整理任务" }
             ServiceCompat.startForeground(this, 2, Notifications.build(this, "整理课堂笔记", "第 ${index + 1}/${batches.size} 批").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            AppLog.i("NotesService", "第 ${index + 1}/${batches.size} 批开始 batch=${batch.batchId}")
             val images = batch.photos.map { photo -> encodeImage(File(graph.lessonDir(job.lessonId), photo.filename)) }
             val request = ChatProtocol.initial(settings.model, batch, images, definition, settings.strict)
             var saved = graph.dao.batch(job.id, batch.batchId, job.revision)
@@ -74,6 +80,7 @@ class NotesService : Service() {
                 val submission = ChatProtocol.submission(client.complete(request))
                 try {
                     val notes = NoteValidator.parseAndValidate(submission.arguments, batch)
+                    AppLog.d("NotesService") { "批次结果 batch=${batch.batchId} 标题=${notes.title} 小节=${notes.sections.size}" }
                     val receipt = ChatProtocol.receipt(submission.callId, true, batch.batchId, job.id)
                     graph.database.withTransaction {
                         check(graph.dao.lesson(job.lessonId)?.revision == job.revision) { "课堂来源版本已变化" }
@@ -81,7 +88,9 @@ class NotesService : Service() {
                             protocolJson.encodeToString(notes), submission.callId, submission.assistant.toString(), receipt.toString()))
                     }
                     saved = requireNotNull(graph.dao.batch(job.id, batch.batchId, job.revision))
+                    AppLog.i("NotesService", "批次已保存 batch=${batch.batchId}")
                 } catch (error: Exception) {
+                    AppLog.e("NotesService", "批次校验或保存失败 batch=${batch.batchId}", error)
                     val failure = ChatProtocol.receipt(submission.callId, false, batch.batchId, error = "笔记结构、来源或本地保存校验失败")
                     runCatching { client.complete(ChatProtocol.followup(request, submission.assistant, failure)) }
                     throw error
@@ -96,13 +105,23 @@ class NotesService : Service() {
                 check(choice["finish_reason"]?.jsonPrimitive?.content == "stop") { "服务未完成保存确认，已保存笔记可继续查看" }
                 check(choice.getValue("message").jsonObject["tool_calls"] == null) { "完成确认不应再次调用工具" }
                 graph.dao.confirmBatch(job.id, batch.batchId, job.revision)
+                AppLog.i("NotesService", "批次保存确认 batch=${batch.batchId}")
             }
         }
         graph.dao.jobStatus(job.id, "completed")
         graph.dao.clearEditedNote(job.lessonId)
+        AppLog.i("NotesService", "整理任务完成 job=${job.id}")
     }
-    override fun onTimeout(startId: Int, fgsType: Int) { active?.cancel(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
-    override fun onDestroy() { scope.cancel(); super.onDestroy() }
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        AppLog.e("NotesService", "前台服务超时，停止整理")
+        active?.cancel(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+    }
+    override fun onDestroy() {
+        AppLog.i("NotesService", "整理服务销毁")
+        scope.cancel()
+        AppLog.flush()
+        super.onDestroy()
+    }
     companion object {
         fun encodeImage(file: File): ImageInput {
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }

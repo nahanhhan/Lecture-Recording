@@ -50,6 +50,12 @@ object AppLog {
 
     fun d(tag: String, message: String) = log(LogEventLevel.DEBUG, tag, message)
 
+    /** Debug 细节日志（按需构造消息）：仅 Debug 档求值 [message]，避免低档位下大正文拼接开销。 */
+    fun d(tag: String, message: () -> String) {
+        if (level() != LogLevel.DEBUG) return
+        log(LogEventLevel.DEBUG, tag, message())
+    }
+
     fun e(tag: String, message: String, error: Throwable? = null) =
         log(LogEventLevel.ERROR, tag, if (error == null) message else "$message: $error")
 

@@ -1,6 +1,7 @@
 package io.github.nahanhhan.lecturerecording.cloud
 
 import io.github.nahanhhan.lecturerecording.data.CloudSettings
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.protocolJson
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
@@ -23,16 +24,20 @@ class CloudClient(private val settings: CloudSettings) {
         val request = Request.Builder().url("$base/chat/completions")
             .header("Authorization", "Bearer ${settings.key}")
             .post(body.toString().toRequestBody("application/json".toMediaType())).build()
+        AppLog.i("CloudClient", "发起模型调用 模型=${settings.model} 地址=$base/chat/completions")
+        AppLog.d("CloudClient") { "请求正文=$body" }
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
                 override fun onFailure(call: Call, error: java.io.IOException) {
+                    AppLog.e("CloudClient", "网络请求失败", error)
                     if (continuation.isActive) continuation.resumeWithException(IllegalStateException("网络请求失败，请检查连接后重试"))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         response.use {
+                            AppLog.i("CloudClient", "接口响应 HTTP=${it.code}")
                             check(it.isSuccessful) { when (it.code) {
                                 401, 403 -> "接口鉴权失败，请检查 API Key"
                                 429 -> "接口限流，请稍后重试"
@@ -48,9 +53,11 @@ class CloudClient(private val settings: CloudSettings) {
                             }
                             val bytes = output.toByteArray()
                             val json = protocolJson.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
+                            AppLog.d("CloudClient") { "响应正文=$json" }
                             if (continuation.isActive) continuation.resume(json)
                         }
                     } catch (error: Exception) {
+                        AppLog.e("CloudClient", "模型调用失败", error)
                         if (continuation.isActive) continuation.resumeWithException(error)
                     }
                 }
