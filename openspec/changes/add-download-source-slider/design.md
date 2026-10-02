@@ -26,8 +26,8 @@
 
 ## Decisions
 
-**D1：滑块控件用 Compose `Slider` 两档（0f/1f，`steps = 0`），两端标注「魔塔社区」「GitHub」。**
-用户明确要求"滑块"。备选：`Switch`（语义是开关，两端标签弱）、`SegmentedButton`（不是滑块）。`Slider` 取值只允许 0/1 两档，`onValueChange` 中按四舍五入映射为枚举，避免出现中间态；`enabled` 由下载状态与录音状态共同控制（对应 spec「下载进行中的源切换保护」）。
+**D1：切换控件用 Material3 `SingleChoiceSegmentedButtonRow` + `SegmentedButton` 两档，选中档高亮，整体为胶囊分段样式。**
+最初按"滑块"实现了 `Slider` 两档，实际效果确认不是想要的——期望是图二那种分段切换控件。备选：`Slider` 两档（原方案，外观是滑杆、语义是连续量，已否决）、`Switch`（语义是开关，两端标签弱）、自绘胶囊切换（重复造轮子，无障碍语义需自行补全）。选 `SegmentedButton`：单选语义天然两档互斥，自带选中态与无障碍语义（`selected`/`onClick`）；`enabled` 由下载状态与录音状态共同控制（对应 spec「下载进行中的源切换保护」）。
 
 **D2：下载源建模为 `enum class DownloadSource { GITHUB, MODELSCOPE }`，放在 `models` 包，`ModelSpec` 增加 `urlFor(source: String)`（或 `modelscopeRepo`/`modelscopeBranch` 字段 + 拼接函数）。**
 备选 A：把完整 URL 存两份在 `ModelSpec` —— 冗余且易失配。备选 B：在 `ModelDownloadService` 里拼 URL —— 违反"目录拥有模型元数据"的现状，服务只该消费 URL。选：`ModelSpec` 持有 `modelscope`（`组织/仓库`）与 `modelscopeBranch`（默认 `master`），`urlFor(source)` 返回对应直链；GitHub 分支保持现有计算属性逻辑不变。偏好以字符串 `"github"`/`"modelscope"` 存 SharedPreferences（键 `download_source`，缺省 `github`），读取时映射到枚举，未知值回落 GitHub。
@@ -41,7 +41,7 @@
 **D5：`sha256` 校验跨源共用，不按源区分。**
 两源是同一归档文件的镜像，`ModelSpec.sha256`/`bytes` 是文件的固有属性。若某源实际文件不一致，校验失败即删除并提示重新下载（spec「下载完整性校验与安装」），这是期望行为而非缺陷——它把"镜像不一致"暴露为可重试的错误。
 
-**D6：滑块状态存 `SettingsStore`，下载服务启动时读取当前偏好。**
+**D6：下载源选择存 `SettingsStore`，下载服务启动时读取当前偏好。**
 `ModelDownloadService.onStartCommand` 通过 `graph.settings.downloadSource` 取源并传入 `install`。备选：通过 Intent extra 传源 —— 服务被系统重启（`START_NOT_STICKY` 下不重启，但仍可能重投递）时 extra 与偏好可能不一致，以偏好为唯一事实来源更简单。
 
 **D7：调研脚本独立于默认检查。**
