@@ -16,3 +16,6 @@ captures/
 app/src/main/jniLibs/
 app/src/main/java/com/k2fsa/
 verification/local-*.txt
+verification/checks/.venv/
+verification/checks/checks/__pycache__
+*.pyc
