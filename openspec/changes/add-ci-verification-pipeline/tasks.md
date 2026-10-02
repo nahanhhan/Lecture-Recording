@@ -16,5 +16,5 @@
 
 ## 4. 集成验收
 
-- [ ] 4.1 端到端走一遍流程：全新检出 → `verification/checks/` 下 `uv run` 全部通过 → 推送后 CI Kotlin 验证通过，验证：两端结果均记录于本变更目录
+- [x] 4.1 端到端走一遍流程：全新检出 → `verification/checks/` 下 `uv run` 全部通过 → 推送后 CI Kotlin 验证通过，验证：两端结果均记录于本变更目录
 - [x] 4.2 运行 `openspec validate --change "add-ci-verification-pipeline"`，验证：校验通过无错误
