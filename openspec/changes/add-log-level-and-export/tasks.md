@@ -37,5 +37,5 @@
 
 ## 6. 集成核对
 
-- [ ] 6.1 `openspec validate add-log-level-and-export` 通过，spec 场景与实现行为逐条对照无遗漏
-- [ ] 6.2 全量 CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过（仅表述为工程验证通过，真机验收按 [`verification/DEVICE_CHECKLIST.md`](verification/DEVICE_CHECKLIST.md) 人工执行）
+- [x] 6.1 `openspec validate add-log-level-and-export` 通过，spec 场景与实现行为逐条对照无遗漏
+- [x] 6.2 全量 CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过（仅表述为工程验证通过，真机验收按 [`verification/DEVICE_CHECKLIST.md`](verification/DEVICE_CHECKLIST.md) 人工执行）
