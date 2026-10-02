@@ -27,18 +27,24 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Prepare sherpa runtime
         run: python scripts/bootstrap.py --native
-      - name: Load static debug keystore
+      - name: Guard static debug keystore
         run: |
           if [ ! -f debug.keystore ]; then
             echo "::error::Missing static debug.keystore at repo root. Run the 'Init debug keystore' workflow once to create it."
             exit 1
           fi
-          mkdir -p ~/.android
-          cp debug.keystore ~/.android/debug.keystore
       - name: Verify and build
         run: |
           chmod +x gradlew
           ./gradlew :core:test :app:lintDebug :app:assembleDebug --console=plain
+      - name: Signature diagnostics (read-only)
+        run: |
+          echo "== Static debug.keystore certificate =="
+          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "Alias name:|Owner:|SHA1:|SHA256:"
+          echo "== AGP signing report =="
+          ./gradlew :app:signingReport --console=plain
+          echo "== APK signer certificate =="
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | grep -E "Signer #1 certificate SHA"
       - uses: actions/upload-artifact@v4
         with:
           name: lecture-recording-debug

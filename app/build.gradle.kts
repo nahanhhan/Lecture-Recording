@@ -30,6 +30,15 @@ android {
         jniLibs.excludes += setOf("**/libsherpa-onnx-c-api.so", "**/libsherpa-onnx-cxx-api.so")
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
+    signingConfigs {
+        maybeCreate("debug").apply {
+            storeFile = rootProject.file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+    buildTypes.getByName("debug").signingConfig = signingConfigs.getByName("debug")
     buildTypes.getByName("release") {
         isMinifyEnabled = true
         isShrinkResources = true
