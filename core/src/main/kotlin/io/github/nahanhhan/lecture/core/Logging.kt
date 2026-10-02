@@ -51,6 +51,13 @@ fun formatLogTimestamp(epochMs: Long, zone: ZoneId = ZoneId.systemDefault()): St
     timestampFormat.format(Instant.ofEpochMilli(epochMs).atZone(zone))
 
 /**
+ * 档位规则下的日志消息体：Info 档做凭据掩码，Debug 档保留原文以便还原现场。
+ * 文件行与 logcat 双通道共用此规则。
+ */
+fun logMessageBody(configured: LogLevel, message: String): String =
+    if (configured == LogLevel.INFO) maskCredentials(message) else message
+
+/**
  * 格式化日志行：`<时间戳> <级别>/<来源> <消息>`。
  * [configured] 为 Info 档时对消息做凭据掩码；Debug 档保留原文以便还原现场。
  */
@@ -67,8 +74,7 @@ fun formatLogLine(
         LogEventLevel.INFO -> "I"
         LogEventLevel.ERROR -> "E"
     }
-    val body = if (configured == LogLevel.INFO) maskCredentials(message) else message
-    return "${formatLogTimestamp(epochMs, zone)} $letter/$source $body"
+    return "${formatLogTimestamp(epochMs, zone)} $letter/$source ${logMessageBody(configured, message)}"
 }
 
 /**
