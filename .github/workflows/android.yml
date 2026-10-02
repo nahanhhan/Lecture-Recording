@@ -37,14 +37,6 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew :core:test :app:lintDebug :app:assembleDebug --console=plain
-      - name: Signature diagnostics (read-only)
-        run: |
-          echo "== Static debug.keystore certificate =="
-          keytool -list -v -keystore debug.keystore -storepass android -alias androiddebugkey | grep -E "Alias name:|Owner:|SHA1:|SHA256:"
-          echo "== AGP signing report =="
-          ./gradlew :app:signingReport --console=plain
-          echo "== APK signer certificate =="
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk | grep -E "Signer #1 certificate SHA"
       - uses: actions/upload-artifact@v4
         with:
           name: lecture-recording-debug
