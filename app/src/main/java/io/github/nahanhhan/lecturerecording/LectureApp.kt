@@ -1,0 +1,46 @@
+package io.github.nahanhhan.lecturerecording
+
+import android.app.Application
+import androidx.room.Room
+import io.github.nahanhhan.lecturerecording.data.*
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import java.io.File
+import io.github.nahanhhan.lecturerecording.recording.WavFile
+
+data class RecordingState(val lessonId: String? = null, val status: String = "idle", val samples: Long = 0,
+    val preview: String = "", val queueSize: Int = 0, val warning: String = "")
+data class DownloadState(val modelId: String = "", val bytes: Long = 0, val total: Long = 0,
+    val status: String = "idle", val error: String = "")
+
+class AppGraph(val app: Application) {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    val database = Room.databaseBuilder(app, LectureDatabase::class.java, "lectures.db").build()
+    val dao = database.dao()
+    val settings = SettingsStore(app)
+    val recording = MutableStateFlow(RecordingState())
+    val download = MutableStateFlow(DownloadState())
+    fun lessonDir(id: String) = File(app.filesDir, "lessons/$id").apply { mkdirs() }
+    val initialized = scope.async {
+        dao.interruptOldRecordings(); dao.interruptOldJobs()
+        dao.allChunks().forEach { chunk ->
+            val file = File(chunk.path)
+            if (file.exists()) {
+                val samples = WavFile.repair(file)
+                dao.setChunkSamples(chunk.id, samples)
+                val lesson = dao.lesson(chunk.lessonId)
+                if (lesson != null && chunk.startSample + samples > lesson.samples)
+                    dao.setSamples(lesson.id, chunk.startSample + samples)
+            }
+        }
+    }
+}
+
+class LectureApp : Application() {
+    lateinit var graph: AppGraph
+    override fun onCreate() {
+        super.onCreate()
+        // ASR process owns only its recognizer; it must not run main-process recovery.
+        if (!getProcessName().endsWith(":asr")) graph = AppGraph(this)
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "chatcmpl_example_002",
+  "object": "chat.completion",
+  "created": 0,
+  "model": "YOUR_CONFIGURED_VISION_TOOL_CALLING_MODEL",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "当前批次笔记已保存。"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

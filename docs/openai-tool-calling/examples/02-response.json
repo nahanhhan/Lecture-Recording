@@ -1,0 +1,26 @@
+{
+  "id": "chatcmpl_example_001",
+  "object": "chat.completion",
+  "created": 0,
+  "model": "YOUR_CONFIGURED_VISION_TOOL_CALLING_MODEL",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_notes_example_001",
+            "type": "function",
+            "function": {
+              "name": "save_class_notes",
+              "arguments": "{\"title\":\"操作系统：信号量\",\"sections\":[{\"heading\":\"信号量与进程协调\",\"markdown\":\"semaphore（信号量）用于协调进程之间的执行。\\n\\n- P 操作：申请资源。\\n- V 操作：释放资源。\",\"source_segment_ids\":[\"segment_001\",\"segment_002\"],\"photo_ids\":[\"photo_001\"]}]}"
+            }
+          }
+        ]
+      },
+      "finish_reason": "tool_calls"
+    }
+  ]
+}

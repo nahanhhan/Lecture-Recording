@@ -1,0 +1,138 @@
+package io.github.nahanhhan.lecturerecording.ui
+
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import android.util.Base64
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.nahanhhan.lecturerecording.*
+import io.github.nahanhhan.lecturerecording.cloud.CloudClient
+import io.github.nahanhhan.lecturerecording.data.CloudSettings
+import io.github.nahanhhan.lecturerecording.models.*
+import io.github.nahanhhan.lecture.core.*
+import kotlinx.coroutines.*
+import kotlinx.serialization.json.*
+import java.io.ByteArrayOutputStream
+import java.io.File
+
+@Composable fun SettingsScreen(activity: MainActivity, graph: AppGraph) {
+    val initial = remember { graph.settings.cloud() }
+    var base by remember { mutableStateOf(initial.baseUrl) }
+    var model by remember { mutableStateOf(initial.model) }
+    var key by remember { mutableStateOf(initial.key) }
+    var strict by remember { mutableStateOf(initial.strict) }
+    var glossary by remember { mutableStateOf(graph.settings.glossary) }
+    var selectedModel by remember { mutableStateOf(graph.settings.modelId) }
+    var message by remember { mutableStateOf("") }
+    var testing by remember { mutableStateOf(false) }
+    val download by graph.download.collectAsStateWithLifecycle()
+    val recording by graph.recording.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("手机识别模型", style = MaterialTheme.typography.titleLarge)
+        Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。", style = MaterialTheme.typography.bodyMedium)
+        ModelCatalog.models.forEach { spec ->
+            val installed = File(activity.filesDir, "models/${spec.id}/installed.json").exists()
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row {
+                        RadioButton(selected = selectedModel == spec.id, enabled = recording.lessonId == null, onClick = {
+                            selectedModel = spec.id; graph.settings.modelId = spec.id
+                        })
+                        Column { Text(spec.label); Text(if (installed) "已安装" else "尚未安装", style = MaterialTheme.typography.bodySmall) }
+                    }
+                    if (!installed) OutlinedButton(enabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying"), onClick = {
+                        ContextCompat.startForegroundService(activity, Intent(activity, ModelDownloadService::class.java).putExtra("model", spec.id))
+                    }) { Text("下载 / 继续下载") }
+                    if (download.modelId == spec.id && download.status != "idle") {
+                        Text(when (download.status) { "verifying" -> "正在校验并安装"; "installed" -> "安装完成"; "error" -> download.error; else -> "${download.bytes / 1024 / 1024} / ${download.total / 1024 / 1024} MB" })
+                        if (download.total > 0 && download.status == "downloading") LinearProgressIndicator(
+                            progress = { (download.bytes.toFloat() / download.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        HorizontalDivider()
+        Text("云端笔记整理", style = MaterialTheme.typography.titleLarge)
+        Text("仅在手动整理时发送转写文字和选定照片。请选择支持图片与工具调用的模型。")
+        OutlinedTextField(base, { base = it }, label = { Text("HTTPS 基础地址（通常以 /v1 结尾）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(model, { model = it }, label = { Text("模型名称") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+        OutlinedTextField(key, { key = it }, label = { Text("API Key") }, visualTransformation = PasswordVisualTransformation(), modifier = Modifier.fillMaxWidth(), singleLine = true)
+        Row { Checkbox(strict, { strict = it }); Text("严格参数模式", Modifier.padding(top = 14.dp)) }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(enabled = !testing, onClick = {
+                try { graph.settings.saveCloud(CloudSettings(base, model, key, strict)); message = "配置已加密保存，请测试接口" }
+                catch (exception: Exception) { message = "配置保存失败" }
+            }) { Text("保存配置") }
+            OutlinedButton(enabled = !testing && key.isNotBlank() && model.isNotBlank(), onClick = {
+                testing = true; message = "正在测试文字、读图、工具调用和保存回执"
+                scope.launch {
+                    try {
+                        graph.settings.saveCloud(CloudSettings(base, model, key, strict))
+                        withContext(Dispatchers.IO) { testCloud(activity, graph) }
+                        graph.settings.cloudTested = true; message = "接口测试通过，可以整理笔记"
+                    } catch (exception: Exception) { message = "测试失败：${exception.message ?: "接口不兼容"}" }
+                    finally { testing = false }
+                }
+            }) { Text(if (testing) "测试中…" else "测试接口") }
+        }
+        if (message.isNotBlank()) Text(message)
+        HorizontalDivider()
+        Text("课程术语", style = MaterialTheme.typography.titleLarge)
+        Text("术语帮助云端理解已有课堂内容。用逗号或换行分隔。")
+        OutlinedTextField(glossary, { glossary = it; graph.settings.glossary = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, label = { Text("例如 semaphore、Transformer") })
+        HorizontalDivider()
+        Text("后台运行", style = MaterialTheme.typography.titleLarge)
+        val power = activity.getSystemService(PowerManager::class.java)
+        Text(if (power.isIgnoringBatteryOptimizations(activity.packageName)) "系统电池优化已放行" else "系统电池优化仍启用，请结合手机后台设置检查")
+        Text("录音期间请保留持续通知。在澎湃 OS / ColorOS 中允许后台运行，并检查省电模式。系统强制停止或关机后，再次打开可查看已保存资料。")
+        OutlinedButton(onClick = { runCatching { activity.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }) { Text("打开电池设置") }
+        OutlinedButton(onClick = { activity.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${activity.packageName}"))) }) { Text("打开应用系统设置") }
+        Text("版本 0.1.0-alpha · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private suspend fun testCloud(activity: MainActivity, graph: AppGraph) {
+    val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap); canvas.drawColor(AndroidColor.WHITE)
+    canvas.drawText("7", 80f, 185f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = AndroidColor.BLACK; textSize = 160f })
+    val output = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); bitmap.recycle()
+    val image = ImageInput("image/png", Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP))
+    val batch = Batch("capability_test", "batch_001", 1, "接口能力测试", emptyList(),
+        listOf(Segment("test_text", 0, 1000, "本节只讨论所附图片中央的数字。")),
+        listOf(Photo("test_photo", "ast_000000000_001.jpg", 0)))
+    val definition = activity.assets.open("tool-definition.json").bufferedReader().use { protocolJson.parseToJsonElement(it.readText()).jsonObject }
+    val settings = graph.settings.cloud()
+    val initial = ChatProtocol.initial(settings.model, batch, listOf(image), definition, settings.strict)
+    val messages = initial.getValue("messages").jsonArray.toMutableList()
+    val user = messages[1].jsonObject
+    val contents = user.getValue("content").jsonArray.toMutableList()
+    contents.add(0, buildJsonObject { put("type", "text"); put("text", "这是接口测试。请读取图片中央的数字，并将该数字写入笔记标题或正文，引用照片编号。") })
+    messages[1] = JsonObject(user + ("content" to JsonArray(contents)))
+    val request = JsonObject(initial + ("messages" to JsonArray(messages)))
+    val client = CloudClient(settings)
+    val submission = ChatProtocol.submission(client.complete(request))
+    val notes = NoteValidator.parseAndValidate(submission.arguments, batch)
+    check((notes.title + notes.sections.joinToString { it.markdown }).contains("7") && notes.sections.any { "test_photo" in it.photoIds }) { "模型未正确读取测试图片" }
+    val testFile = File(activity.cacheDir, "cloud-capability-test.json")
+    testFile.writeText(submission.arguments)
+    check(testFile.readText() == submission.arguments) { "测试结果未成功保存" }
+    val receipt = ChatProtocol.receipt(submission.callId, true, batch.batchId, "capability_test")
+    val final = client.complete(ChatProtocol.followup(request, submission.assistant, receipt))
+    check(final.getValue("choices").jsonArray.first().jsonObject["finish_reason"]?.jsonPrimitive?.content == "stop") { "接口未完成工具回执确认" }
+}

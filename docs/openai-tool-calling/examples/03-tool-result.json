@@ -1,0 +1,5 @@
+{
+  "role": "tool",
+  "tool_call_id": "call_notes_example_001",
+  "content": "{\"ok\":true,\"status\":\"batch_saved\",\"note_id\":\"note_example_001\",\"batch_id\":\"batch_001\"}"
+}
