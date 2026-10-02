@@ -30,6 +30,7 @@ import kotlinx.serialization.json.*
 import java.io.ByteArrayOutputStream
 import java.io.File
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable fun SettingsScreen(activity: MainActivity, graph: AppGraph) {
     val initial = remember { graph.settings.cloud() }
     var base by remember { mutableStateOf(initial.baseUrl) }
@@ -47,19 +48,24 @@ import java.io.File
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("手机识别模型", style = MaterialTheme.typography.titleLarge)
         Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。魔塔社区与 GitHub 是同一模型的镜像，文件一致，下载后统一校验。", style = MaterialTheme.typography.bodyMedium)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("魔塔社区")
-            Slider(
-                value = if (source == DownloadSource.MODELSCOPE) 1f else 0f,
-                onValueChange = { value ->
-                    val next = if (value >= 0.5f) DownloadSource.MODELSCOPE else DownloadSource.GITHUB
-                    if (next != source) { source = next; graph.settings.downloadSource = next }
-                },
-                steps = 0,
-                enabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying"),
-                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+        val switchEnabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying")
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = source == DownloadSource.MODELSCOPE,
+                onClick = { source = DownloadSource.MODELSCOPE; graph.settings.downloadSource = DownloadSource.MODELSCOPE },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                enabled = switchEnabled,
+                icon = {},
+                label = { Text("魔塔社区") }
             )
-            Text("GitHub")
+            SegmentedButton(
+                selected = source == DownloadSource.GITHUB,
+                onClick = { source = DownloadSource.GITHUB; graph.settings.downloadSource = DownloadSource.GITHUB },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                enabled = switchEnabled,
+                icon = {},
+                label = { Text("GitHub") }
+            )
         }
         ModelCatalog.models.forEach { spec ->
             val installed = File(activity.filesDir, "models/${spec.id}/installed.json").exists()
