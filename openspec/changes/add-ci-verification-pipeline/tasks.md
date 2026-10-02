@@ -11,7 +11,7 @@
 - [x] 2.2 实现 JSON 资产检查（`app/src/main/assets/tool-definition.json` 与 `docs/openai-tool-calling/` 示例可解析且工具定义一致），验证：当前仓库运行通过；临时破坏一个 JSON 后运行失败并指出该文件，恢复后重新通过
 ## 3. CI 职责确认与文档同步
 
-- [ ] 3.1 确认 `android.yml` 保持 Kotlin/Android 验证职责且不含 uv 步骤，仅按需要微调触发条件，验证：workflow 语法有效，push/PR 触发后 `:core:test :app:lintDebug :app:assembleDebug` 正常执行
+- [x] 3.1 确认 `android.yml` 保持 Kotlin/Android 验证职责且不含 uv 步骤，仅按需要微调触发条件，验证：workflow 语法有效，push/PR 触发后 `:core:test :app:lintDebug :app:assembleDebug` 正常执行
 - [ ] 3.2 同步 README 工程结构表与验证说明（端侧 `uv run` 自检入口、CI 批次验收语义、CI 通过≠真机验收），验证：按 README 中写明的命令照做可跑通，工程结构表包含 `verification/checks/`
 
 ## 4. 集成验收
