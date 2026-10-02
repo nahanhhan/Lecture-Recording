@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from . import json_assets, version_consistency
+from . import json_assets, model_sources, version_consistency
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -19,6 +19,7 @@ CheckFn = Callable[[Path], list[str]]
 CHECKS: list[tuple[str, CheckFn]] = [
     ("版本一致性", version_consistency.run),
     ("JSON 资产", json_assets.run),
+    ("下载源", model_sources.run),
 ]
 
 

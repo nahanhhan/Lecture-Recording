@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import io.github.nahanhhan.lecturerecording.models.DownloadSource
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -17,6 +18,11 @@ class SettingsStore(context: Context) {
     var modelId: String
         get() = preferences.getString("asr_model", "aed")!!
         set(value) { preferences.edit().putString("asr_model", value).apply() }
+
+    /** 模型下载源，键 `download_source`，缺省 GitHub；未知值回落 GITHUB。 */
+    var downloadSource: DownloadSource
+        get() = DownloadSource.fromStorage(preferences.getString("download_source", null))
+        set(value) { preferences.edit().putString("download_source", value.storage).apply() }
     var glossary: String
         get() = preferences.getString("glossary", "")!!
         set(value) { preferences.edit().putString("glossary", value).apply() }

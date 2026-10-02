@@ -14,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,7 @@ import java.io.File
     var strict by remember { mutableStateOf(initial.strict) }
     var glossary by remember { mutableStateOf(graph.settings.glossary) }
     var selectedModel by remember { mutableStateOf(graph.settings.modelId) }
+    var source by remember { mutableStateOf(graph.settings.downloadSource) }
     var message by remember { mutableStateOf("") }
     var testing by remember { mutableStateOf(false) }
     val download by graph.download.collectAsStateWithLifecycle()
@@ -44,7 +46,21 @@ import java.io.File
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("手机识别模型", style = MaterialTheme.typography.titleLarge)
-        Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。", style = MaterialTheme.typography.bodyMedium)
+        Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。魔塔社区与 GitHub 是同一模型的镜像，文件一致，下载后统一校验。", style = MaterialTheme.typography.bodyMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("魔塔社区")
+            Slider(
+                value = if (source == DownloadSource.MODELSCOPE) 1f else 0f,
+                onValueChange = { value ->
+                    val next = if (value >= 0.5f) DownloadSource.MODELSCOPE else DownloadSource.GITHUB
+                    if (next != source) { source = next; graph.settings.downloadSource = next }
+                },
+                steps = 0,
+                enabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying"),
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp)
+            )
+            Text("GitHub")
+        }
         ModelCatalog.models.forEach { spec ->
             val installed = File(activity.filesDir, "models/${spec.id}/installed.json").exists()
             Card(Modifier.fillMaxWidth()) {

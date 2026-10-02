@@ -26,10 +26,11 @@ class ModelDownloadService : Service() {
         if (active?.isActive == true) return START_NOT_STICKY
         ServiceCompat.startForeground(this, 3, Notifications.build(this, "下载识别模型", "正在连接下载源").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val modelId = intent?.getStringExtra("model") ?: "aed"
+        val source = graph.settings.downloadSource
         active = scope.launch {
             try {
                 check(graph.recording.value.lessonId == null) { "请在录音结束后安装模型" }
-                install(ModelCatalog.get(modelId))
+                install(ModelCatalog.get(modelId), source)
                 graph.download.value = graph.download.value.copy(status = "installed")
             } catch (error: Exception) {
                 graph.download.value = graph.download.value.copy(modelId = modelId, status = "error", error = if (error is CancellationException) "下载已暂停，可继续" else error.message ?: "下载失败，可继续")
@@ -45,15 +46,18 @@ class ModelDownloadService : Service() {
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
-    private suspend fun install(model: ModelSpec) {
+    private suspend fun install(model: ModelSpec, source: DownloadSource) {
         val root = File(filesDir, "models").apply { mkdirs() }
-        val partial = File(root, "${model.id}.part")
-        val etagFile = File(root, "${model.id}.etag")
+        // 旧格式残留不带下载源，无法归属到具体源，直接清理避免跨源续传
+        File(root, "${model.id}.part").delete()
+        File(root, "${model.id}.etag").delete()
+        val partial = File(root, "${model.id}.${source.storage}.part")
+        val etagFile = File(root, "${model.id}.${source.storage}.etag")
         val offset = if (partial.exists()) partial.length() else 0
         graph.download.value = DownloadState(model.id, offset, model.bytes, "downloading")
         val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
         if (offset < model.bytes) {
-            val builder = Request.Builder().url(model.url)
+            val builder = Request.Builder().url(model.urlFor(source))
             if (offset > 0) {
                 builder.header("Range", "bytes=$offset-")
                 if (etagFile.exists()) builder.header("If-Range", etagFile.readText())
