@@ -28,15 +28,15 @@
 - **WHEN** 项目根目录已存在 `debug.keystore` 且再次运行初始化工作流
 - **THEN** 既有文件保持不变，不生成新密钥
 
-### Requirement: CI 始终加载静态签名
-CI 构建 debug 产物 SHALL 始终使用项目根目录 `debug.keystore` 签名；MUST NOT 依赖构建机自动生成的一次性调试密钥，密钥缺失时 MUST 显式失败而非自动回退。
+### Requirement: debug 构建显式使用静态签名
+debug 构建 SHALL 由构建脚本显式声明以项目根目录 `debug.keystore` 签名；MUST NOT 依赖构建机默认调试密钥或自动生成的一次性调试密钥，密钥缺失时 MUST 显式失败而非自动回退。
 
 #### Scenario: 全新环境产物使用静态签名
 - **WHEN** CI 在全新构建环境运行 debug 构建
 - **THEN** 产出 APK 的签名证书与项目根目录 `debug.keystore` 的证书一致
 
 #### Scenario: 密钥缺失显式失败
-- **WHEN** 项目根目录缺少 `debug.keystore` 时 CI 运行 debug 构建
+- **WHEN** 项目根目录缺少 `debug.keystore` 时运行 debug 构建
 - **THEN** 构建失败并报告缺少静态签名密钥，不产出 APK
 
 ### Requirement: 产物平滑升级
