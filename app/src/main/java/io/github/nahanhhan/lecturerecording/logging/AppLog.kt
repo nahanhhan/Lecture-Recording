@@ -22,7 +22,7 @@ object AppLog {
 
     /** 两进程共用的初始化入口：按当前进程名确定来源标识。 */
     fun init(app: Application) {
-        init(app.filesDir, sourceNameOf(app.getProcessName()))
+        init(app.filesDir, sourceNameOf(Application.getProcessName()))
     }
 
     /**
@@ -34,7 +34,7 @@ object AppLog {
             val levelStore = LogLevelStore(File(filesDir, "log/level"))
             store = levelStore
             writer?.close()
-            writer = LogWriter(File(filesDir, "log/$source.log"), source) { levelStore.level() }
+            writer = LogWriter(File(filesDir, "log/$source.log"), source, configuredLevel = { levelStore.level() })
         }
     }
 
