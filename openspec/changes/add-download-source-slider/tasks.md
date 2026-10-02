@@ -21,5 +21,5 @@
 
 - [x] 4.1 运行调研脚本确认两源直链与 Range 支持：`cd verification/checks && uv run python probe_download_sources.py`——验证：脚本在 2 分钟内结束，两个模型的 GitHub 与魔塔直链均返回 200/206，无 `[FAIL]`
 - [x] 4.2 运行端侧静态检查 `cd verification/checks && uv run python -m checks`——验证：全部检查通过（端侧不要求 Kotlin 环境）；Kotlin 构建 `:core:test :app:lintDebug :app:assembleDebug` 由 CI 执行并给出结果
-- [ ] 4.3 真机端到端：默认 GitHub 源完整下载并安装 AED 模型，切到魔塔源下载 CTC 模型，中途各暂停一次验证续传，安装后确认转写功能正常——验证：两个模型 `installed.json` 生成、状态显示「安装完成」、录音转写可用
+- [x] 4.3 真机端到端：默认 GitHub 源完整下载并安装 AED 模型，切到魔塔源下载 CTC 模型，中途各暂停一次验证续传，安装后确认转写功能正常——验证：两个模型 `installed.json` 生成、状态显示「安装完成」、录音转写可用
 - [x] 4.4 运行 `openspec validate --change "add-download-source-slider"` 并核对 spec 场景逐条可复现——验证：validate 通过，spec 中 6 条需求的场景均有对应实现或手工验证记录
