@@ -8,16 +8,27 @@ import java.io.File
 object AppLog {
     private val lock = Any()
     private var writer: LogWriter? = null
+    private var store: LogLevelStore? = null
 
     /**
-     * 初始化日志写入器：写入 `filesDir/log/<source>.log` 并同步输出 logcat。
-     * [levelProvider] 返回当前日志档位（None 全拒、Info 脱敏、Debug 全量）。
+     * 初始化日志：档位持久化于 `filesDir/log/level`，日志写入 `filesDir/log/<source>.log`
+     * 并同步输出 logcat。主进程与 `:asr` 进程各自初始化，source 用于区分来源进程。
      */
-    fun init(filesDir: File, source: String, levelProvider: () -> LogLevel) {
+    fun init(filesDir: File, source: String) {
         synchronized(lock) {
+            val levelStore = LogLevelStore(File(filesDir, "log/level"))
+            store = levelStore
             writer?.close()
-            writer = LogWriter(File(filesDir, "log/$source.log"), source, levelProvider)
+            writer = LogWriter(File(filesDir, "log/$source.log"), source) { levelStore.level() }
         }
+    }
+
+    /** 当前日志档位（未初始化或文件缺失时为默认 None）。 */
+    fun level(): LogLevel = synchronized(lock) { store }?.level() ?: LogLevel.NONE
+
+    /** 切换日志档位：本进程立即生效并持久化，`:asr` 进程 TTL（约 2s）内刷新。 */
+    fun setLevel(level: LogLevel) {
+        synchronized(lock) { store }?.set(level)
     }
 
     fun i(tag: String, message: String) = log(LogEventLevel.INFO, tag, message)

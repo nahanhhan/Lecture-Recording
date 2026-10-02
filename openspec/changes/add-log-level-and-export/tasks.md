@@ -10,7 +10,7 @@
 ## 2. App 端日志运行时与初始化
 
 - [x] 2.1 新增 `logging/` 包写入器：单线程队列异步写 `files/log/<进程>.log`、同时输出 logcat、级别 None 不输出、超上限触发截断、进程退出/服务销毁 flush，验证：CI 编译通过且接入点调用不阻塞（`:app:assembleDebug` 成功）
-- [ ] 2.2 实现日志级别持久化单行文件（临时文件 + rename 原子写）与进程内 TTL（约 2s）缓存读取，验证：CI 通过；行为按 spec「切换级别立即生效并持久化」在真机清单中覆盖
+- [x] 2.2 实现日志级别持久化单行文件（临时文件 + rename 原子写）与进程内 TTL（约 2s）缓存读取，验证：CI 通过；行为按 spec「切换级别立即生效并持久化」在真机清单中覆盖
 - [ ] 2.3 [`LectureApp.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/LectureApp.kt) 两进程初始化 Logger（`:asr` 进程也初始化，且保持不建 `AppGraph` 的既有约束），验证：CI 通过，`:asr` 进程写 `files/log/asr.log`
 - [ ] 2.4 端侧自检 `uv run python -m checks` 通过；CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过作为本批验收
 
