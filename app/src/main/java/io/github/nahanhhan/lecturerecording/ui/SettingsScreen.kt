@@ -45,6 +45,7 @@ import java.io.File
     var message by remember { mutableStateOf("") }
     var testing by remember { mutableStateOf(false) }
     var logLevel by remember { mutableStateOf(AppLog.level()) }
+    var logKb by remember { mutableStateOf(currentLogKb(activity)) }
     val download by graph.download.collectAsStateWithLifecycle()
     val recording by graph.recording.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -157,9 +158,24 @@ import java.io.File
             "Debug 档会记录敏感信息（如 API Key 与转写内容），抓问题后请切回 Info 或 None。",
             color = MaterialTheme.colorScheme.error
         )
+        Text("当前日志占用： ${logKb}KB")
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedButton(onClick = {
+                AppLog.flush()
+                logFiles(activity).forEach { it.delete() }
+                logKb = currentLogKb(activity)
+                message = "日志已清理"
+            }) { Text("清理日志") }
+        }
         Text("版本 0.1.0-alpha · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
     }
 }
+
+private fun logFiles(activity: MainActivity): List<File> =
+    File(activity.filesDir, "log").listFiles { file -> file.isFile && file.extension == "log" }?.toList() ?: emptyList()
+
+private fun currentLogKb(activity: MainActivity): Long =
+    logFiles(activity).sumOf { it.length() } / 1024
 
 private suspend fun testCloud(activity: MainActivity, graph: AppGraph) {
     val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
