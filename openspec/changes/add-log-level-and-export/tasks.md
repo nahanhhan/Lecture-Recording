@@ -32,7 +32,7 @@
 ## 5. 日志覆盖：云端整理、导出打印与 UI
 
 - [x] 5.1 [`NotesService.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/cloud/NotesService.kt)、[`CloudClient.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/cloud/CloudClient.kt) 接入整理各阶段与错误日志；Debug 级别记录完整请求/响应正文，Info 级别仅非敏感元数据（API Key 不落盘），验证：CI 通过
-- [ ] 5.2 [`Exporter.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/export/Exporter.kt)、[`NotesRenderer.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/export/NotesRenderer.kt)、[`DetailScreen.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/ui/DetailScreen.kt)、[`CameraScreen.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/ui/CameraScreen.kt) 接入导出/打印/拍照关键事件与错误日志，验证：CI 通过
+- [x] 5.2 [`Exporter.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/export/Exporter.kt)、[`NotesRenderer.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/export/NotesRenderer.kt)、[`DetailScreen.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/ui/DetailScreen.kt)、[`CameraScreen.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/ui/CameraScreen.kt) 接入导出/打印/拍照关键事件与错误日志，验证：CI 通过
 - [ ] 5.3 端侧自检 `uv run python -m checks` 通过；CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过作为本批验收
 
 ## 6. 集成核对

@@ -6,6 +6,7 @@ import android.print.PrintAttributes
 import android.print.PrintManager
 import android.webkit.*
 import io.github.nahanhhan.lecturerecording.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.zip.ZipEntry
@@ -13,6 +14,7 @@ import java.util.zip.ZipOutputStream
 
 object Exporter {
     suspend fun markdownZip(graph: AppGraph, lessonId: String, markdown: String): File = withContext(Dispatchers.IO) {
+        AppLog.i("Exporter", "开始导出 Markdown lesson=$lessonId")
         val directory = File(graph.app.cacheDir, "exports").apply { mkdirs() }
         val output = File(directory, "lecture_${lessonId}.zip")
         ZipOutputStream(output.outputStream().buffered()).use { zip ->
@@ -22,9 +24,11 @@ object Exporter {
                 if (file.exists()) { zip.putNextEntry(ZipEntry(photo.filename)); file.inputStream().use { it.copyTo(zip) }; zip.closeEntry() }
             }
         }
+        AppLog.i("Exporter", "导出 Markdown 完成 lesson=$lessonId 文件=${output.name} 大小=${output.length()}B")
         output
     }
     fun print(activity: Activity, base: File, markdown: String, title: String) {
+        AppLog.i("Exporter", "保存 PDF lesson 标题=$title")
         val web = WebView(activity)
         configureWeb(web, base)
         web.webViewClient = object : WebViewClient() {

@@ -2,6 +2,7 @@ package io.github.nahanhhan.lecturerecording.export
 
 import io.github.nahanhhan.lecture.core.*
 import io.github.nahanhhan.lecturerecording.data.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import org.commonmark.parser.Parser
 import org.commonmark.renderer.html.HtmlRenderer
 import org.commonmark.ext.gfm.tables.TablesExtension
@@ -12,7 +13,7 @@ object NotesRenderer {
         val segmentMap = segments.associateBy { it.id }
         val photoMap = photos.associateBy { it.id }
         val used = mutableSetOf<String>()
-        return buildString {
+        val result = buildString {
             append("# ").append(notes.first().title).append("\n\n")
             notes.forEach { batch -> batch.sections.forEach { section ->
                 append("## ").append(section.heading).append("\n\n").append(section.markdown).append("\n\n")
@@ -29,13 +30,15 @@ object NotesRenderer {
                 unused.forEach { append("![课堂照片 ").append(formatTime(it.audioTimeMs)).append("](").append(it.filename).append(")\n\n") }
             }
         }
+        AppLog.d("NotesRenderer") { "生成 Markdown ${result.length} 字" }
+        return result
     }
     fun html(markdown: String, title: String): String {
         val extensions = listOf(TablesExtension.create())
         val parser = Parser.builder().extensions(extensions).build()
         val renderer = HtmlRenderer.builder().extensions(extensions).escapeHtml(true).sanitizeUrls(true).build()
         val body = renderer.render(parser.parse(markdown))
-        return """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+        val page = """<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src file: data:; style-src 'unsafe-inline' file:; font-src file:; script-src file: 'nonce-lecture';">
             <title>${escape(title)}</title>
@@ -44,6 +47,8 @@ object NotesRenderer {
             <script src="file:///android_asset/vendor/katex/katex.min.js"></script>
             <script src="file:///android_asset/vendor/katex/auto-render.min.js"></script>
             </head><body>$body<script nonce="lecture">if(window.renderMathInElement){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'$',right:'$',display:false},{left:'\\(',right:'\\)',display:false}],throwOnError:false});}</script></body></html>""".trimIndent()
+        AppLog.d("NotesRenderer") { "生成 HTML ${page.length} 字 标题=$title" }
+        return page
     }
     private fun escape(text: String) = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 }

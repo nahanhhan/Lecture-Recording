@@ -31,6 +31,7 @@ import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.cloud.NotesService
 import io.github.nahanhhan.lecturerecording.data.*
 import io.github.nahanhhan.lecturerecording.export.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.RecordingService
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
@@ -74,7 +75,10 @@ import java.io.File
         player.prepare(); player.play(); playing = true
     }
     val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) camera = true else error = "需要相机权限才能拍照"
+        if (granted) camera = true else {
+            AppLog.e("DetailScreen", "相机权限被拒绝")
+            error = "需要相机权限才能拍照"
+        }
     }
     if (camera) {
         BackHandler { camera = false }
@@ -97,8 +101,10 @@ import java.io.File
                         Button(onClick = { activity.startService(Intent(activity, RecordingService::class.java).setAction(
                             if (recording.status == "paused") RecordingService.RESUME else RecordingService.PAUSE)) }) { Text(if (recording.status == "paused") "继续" else "暂停") }
                         OutlinedButton(onClick = {
-                            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) camera = true
-                            else cameraPermission.launch(Manifest.permission.CAMERA)
+                            if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+                                AppLog.i("DetailScreen", "打开相机 lesson=$id")
+                                camera = true
+                            } else cameraPermission.launch(Manifest.permission.CAMERA)
                         }) { Text("拍照") }
                         OutlinedButton(onClick = { activity.startService(Intent(activity, RecordingService::class.java).setAction(RecordingService.STOP)) }) { Text("结束") }
                     }
@@ -115,9 +121,13 @@ import java.io.File
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(enabled = !cloudRunning && current.status !in setOf("recording", "paused", "processing"), onClick = {
                         if (!graph.settings.cloudTested) error = "请先在设置中配置并测试云端接口"
-                        else ContextCompat.startForegroundService(activity, Intent(activity, NotesService::class.java).putExtra("lesson_id", id))
+                        else {
+                            AppLog.i("DetailScreen", "发起整理 lesson=$id")
+                            ContextCompat.startForegroundService(activity, Intent(activity, NotesService::class.java).putExtra("lesson_id", id))
+                        }
                     }) { Text("整理笔记") }
                     if (jobs.firstOrNull()?.status == "waiting") OutlinedButton(onClick = {
+                        AppLog.i("DetailScreen", "继续整理 job=${jobs.first().id}")
                         ContextCompat.startForegroundService(activity, Intent(activity, NotesService::class.java).putExtra("job_id", jobs.first().id))
                     }) { Text("继续整理") }
                 }
@@ -165,14 +175,21 @@ import java.io.File
             else {
                 Row(Modifier.padding(horizontal = 12.dp)) {
                     TextButton(enabled = !cloudRunning, onClick = { editNote = true }) { Text("编辑笔记") }
-                    TextButton(onClick = { Exporter.print(activity, graph.lessonDir(id), markdown, current.title) }) { Text("保存 PDF") }
+                    TextButton(onClick = {
+                        AppLog.i("DetailScreen", "保存 PDF lesson=$id 标题=${current.title}")
+                        Exporter.print(activity, graph.lessonDir(id), markdown, current.title)
+                    }) { Text("保存 PDF") }
                     TextButton(onClick = { scope.launch {
                         try {
+                            AppLog.i("DetailScreen", "导出 Markdown lesson=$id")
                             val file = Exporter.markdownZip(graph, id, markdown)
                             val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.files", file)
                             activity.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("application/zip")
                                 .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), "导出 Markdown 与照片"))
-                        } catch (exception: Exception) { error = "导出失败：${exception.message}" }
+                        } catch (exception: Exception) {
+                            AppLog.e("DetailScreen", "导出 Markdown 失败 lesson=$id", exception)
+                            error = "导出失败：${exception.message}"
+                        }
                     } }) { Text("导出 Markdown") }
                 }
                 val web = remember { WebView(activity).apply { Exporter.configureWeb(this, graph.lessonDir(id)) } }
@@ -188,6 +205,7 @@ import java.io.File
         AlertDialog(onDismissRequest = { editSegment = null }, title = { Text("编辑转写") }, text = {
             OutlinedTextField(text, { text = it }, modifier = Modifier.heightIn(min = 160.dp, max = 360.dp))
         }, confirmButton = { TextButton(onClick = {
+            AppLog.i("DetailScreen", "编辑转写保存 segment=${segment.id}")
             scope.launch { graph.database.withTransaction { graph.dao.editSegment(segment.id, text); graph.dao.revise(id) } }
             editSegment = null
         }) { Text("保存") } }, dismissButton = { TextButton(onClick = { editSegment = null }) { Text("取消") } })
@@ -196,7 +214,10 @@ import java.io.File
         var text by remember { mutableStateOf(markdown) }
         AlertDialog(onDismissRequest = { editNote = false }, title = { Text("编辑课堂笔记") }, text = {
             OutlinedTextField(text, { text = it }, modifier = Modifier.heightIn(min = 240.dp, max = 440.dp))
-        }, confirmButton = { TextButton(onClick = { scope.launch { graph.dao.putEditedNote(EditedNoteEntity(id, text)) }; editNote = false }) { Text("保存") } },
+        }, confirmButton = { TextButton(onClick = {
+            AppLog.i("DetailScreen", "编辑笔记保存 lesson=$id")
+            scope.launch { graph.dao.putEditedNote(EditedNoteEntity(id, text)) }; editNote = false
+        }) { Text("保存") } },
             dismissButton = { TextButton(onClick = { editNote = false }) { Text("取消") } })
     }
 }

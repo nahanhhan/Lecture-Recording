@@ -16,6 +16,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.room.withTransaction
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.data.PhotoEntity
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.PhotoFilename
 import kotlinx.coroutines.*
 import java.io.File
@@ -39,7 +40,11 @@ import java.util.UUID
                 val camera = future.get(); provider = camera
                 val cameraPreview = Preview.Builder().build().apply { surfaceProvider = preview.surfaceProvider }
                 camera.unbindAll(); camera.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, cameraPreview, capture)
-            } catch (exception: Exception) { error = exception.message ?: "无法打开相机" }
+                AppLog.i("CameraScreen", "相机已打开 lesson=$lessonId")
+            } catch (exception: Exception) {
+                AppLog.e("CameraScreen", "无法打开相机", exception)
+                error = exception.message ?: "无法打开相机"
+            }
         }, executor)
         onDispose { disposed = true; provider?.unbindAll() }
     }
@@ -75,19 +80,23 @@ import java.util.UUID
                                                     graph.dao.putPhoto(PhotoEntity(UUID.randomUUID().toString(), lessonId, pair.first.name, audioMs, capturedAt, pair.second))
                                                     graph.dao.revise(lessonId)
                                                 }
+                                                AppLog.i("CameraScreen", "拍照成功 文件=${pair.first.name} 音频时间=${audioMs}ms 序号=${pair.second}")
                                                 withContext(Dispatchers.Main) { busy = false; saved++ }
                                             } catch (exception: Exception) {
+                                                AppLog.e("CameraScreen", "照片保存失败 文件=${pair.first.name}", exception)
                                                 pair.first.delete()
                                                 withContext(Dispatchers.Main) { busy = false; error = "照片保存失败" }
                                             }
                                         }
                                     }
                                     override fun onError(exception: ImageCaptureException) {
+                                        AppLog.e("CameraScreen", "拍照失败", exception)
                                         pair.first.delete(); busy = false; error = exception.message ?: "拍照失败"
                                     }
                                 })
                         }
                     } catch (exception: Exception) {
+                        AppLog.e("CameraScreen", "照片写入失败", exception)
                         file?.delete(); withContext(Dispatchers.Main) { busy = false; error = exception.message ?: "无法保存照片" }
                     }
                 }
