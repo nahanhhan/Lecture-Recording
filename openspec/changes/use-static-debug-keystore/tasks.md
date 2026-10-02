@@ -2,8 +2,8 @@
 
 ## 1. 仓库配套调整
 
-- [ ] 1.1 在 [`.gitignore`](.gitignore) 为根目录 `debug.keystore` 增加例外（如 `!/debug.keystore`），验证 `git check-ignore debug.keystore` 无输出（不被忽略）且 `keystore.properties`、`*.jks` 仍被忽略
-- [ ] 1.2 在 [`.gitattributes`](.gitattributes) 增加 `*.keystore binary`，验证 `git check-attr binary -- debug.keystore` 返回 `binary: set`
+- [x] 1.1 在 [`.gitignore`](.gitignore) 为根目录 `debug.keystore` 增加例外（如 `!/debug.keystore`），验证 `git check-ignore debug.keystore` 无输出（不被忽略）且 `keystore.properties`、`*.jks` 仍被忽略
+- [x] 1.2 在 [`.gitattributes`](.gitattributes) 增加 `*.keystore binary`，验证 `git check-attr binary -- debug.keystore` 返回 `binary: set`
 
 ## 2. 初始化工作流 init_debug_keystore.yml
 
