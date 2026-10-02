@@ -6,6 +6,7 @@ import android.content.pm.ServiceInfo
 import android.os.IBinder
 import androidx.core.app.ServiceCompat
 import io.github.nahanhhan.lecturerecording.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import okhttp3.*
@@ -27,12 +28,15 @@ class ModelDownloadService : Service() {
         ServiceCompat.startForeground(this, 3, Notifications.build(this, "下载识别模型", "正在连接下载源").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         val modelId = intent?.getStringExtra("model") ?: "aed"
         val source = graph.settings.downloadSource
+        AppLog.i("ModelDownloadService", "开始下载 model=$modelId 下载源=$source")
         active = scope.launch {
             try {
                 check(graph.recording.value.lessonId == null) { "请在录音结束后安装模型" }
                 install(ModelCatalog.get(modelId), source)
                 graph.download.value = graph.download.value.copy(status = "installed")
+                AppLog.i("ModelDownloadService", "模型安装完成 model=$modelId")
             } catch (error: Exception) {
+                AppLog.e("ModelDownloadService", "下载失败 model=$modelId", error)
                 graph.download.value = graph.download.value.copy(modelId = modelId, status = "error", error = if (error is CancellationException) "下载已暂停，可继续" else error.message ?: "下载失败，可继续")
             } finally { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
         }
@@ -54,6 +58,7 @@ class ModelDownloadService : Service() {
         val partial = File(root, "${model.id}.${source.storage}.part")
         val etagFile = File(root, "${model.id}.${source.storage}.etag")
         val offset = if (partial.exists()) partial.length() else 0
+        AppLog.i("ModelDownloadService", "下载 model=${model.id} 已有=${offset}B 总计=${model.bytes}B")
         graph.download.value = DownloadState(model.id, offset, model.bytes, "downloading")
         val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS).readTimeout(60, TimeUnit.SECONDS).build()
         if (offset < model.bytes) {
@@ -64,6 +69,7 @@ class ModelDownloadService : Service() {
             }
             call = client.newCall(builder.build())
             call!!.execute().use { response ->
+                AppLog.i("ModelDownloadService", "下载响应 model=${model.id} HTTP=${response.code}")
                 check(response.isSuccessful) { "下载失败（HTTP ${response.code}）" }
                 val resume = response.code == 206
                 if (resume) check(response.header("Content-Range")?.startsWith("bytes $offset-") == true) { "下载续传位置不一致" }
@@ -80,7 +86,10 @@ class ModelDownloadService : Service() {
                             check(output.filePointer + count <= model.bytes) { "模型下载大小超出预期" }
                             output.write(buffer, 0, count)
                             graph.download.value = DownloadState(model.id, output.filePointer, model.bytes, "downloading")
-                            if (output.filePointer - lastSync > 4 * 1024 * 1024) { output.fd.sync(); lastSync = output.filePointer }
+                            if (output.filePointer - lastSync > 4 * 1024 * 1024) {
+                                output.fd.sync(); lastSync = output.filePointer
+                                AppLog.d("ModelDownloadService", "下载进度 ${output.filePointer}/${model.bytes}")
+                            }
                         }
                         output.fd.sync()
                     }
@@ -88,8 +97,13 @@ class ModelDownloadService : Service() {
             }
         }
         graph.download.value = DownloadState(model.id, partial.length(), model.bytes, "verifying")
+        AppLog.i("ModelDownloadService", "下载完成 model=${model.id} 字节=${partial.length()}，开始校验")
         check(partial.length() == model.bytes) { "下载尚未完成，可继续" }
-        if (digest(partial) != model.sha256) { partial.delete(); throw IllegalStateException("模型校验失败，请重新下载") }
+        if (digest(partial) != model.sha256) {
+            AppLog.e("ModelDownloadService", "模型校验失败 model=${model.id}")
+            partial.delete(); throw IllegalStateException("模型校验失败，请重新下载")
+        }
+        AppLog.i("ModelDownloadService", "校验通过 model=${model.id}，开始解压安装")
         val staging = File(root, "${model.id}_installing").apply { mkdirs() }
         // Only whitelisted regular files are copied; archive paths are never used as destinations.
         TarArchiveInputStream(BZip2CompressorInputStream(partial.inputStream().buffered())).use { archive ->
@@ -120,7 +134,16 @@ class ModelDownloadService : Service() {
             put("files", buildJsonObject { hashes.forEach { (name, hash) -> put(name, hash) } })
         }.toString())
         staging.delete(); partial.delete(); etagFile.delete()
+        AppLog.i("ModelDownloadService", "解压安装完成 model=${model.id} 文件=${model.files.size}")
     }
-    override fun onTimeout(startId: Int, fgsType: Int) { call?.cancel(); active?.cancel(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
-    override fun onDestroy() { call?.cancel(); scope.cancel(); super.onDestroy() }
+    override fun onTimeout(startId: Int, fgsType: Int) {
+        AppLog.e("ModelDownloadService", "前台服务超时，取消下载")
+        call?.cancel(); active?.cancel(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+    }
+    override fun onDestroy() {
+        AppLog.i("ModelDownloadService", "下载服务销毁")
+        call?.cancel(); scope.cancel()
+        AppLog.flush()
+        super.onDestroy()
+    }
 }

@@ -26,7 +26,7 @@
 
 - [x] 4.1 [`RecordingService.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/recording/RecordingService.kt)、[`WavFile.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/recording/WavFile.kt)、[`MainActivity.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/MainActivity.kt) 接入生命周期、状态迁移（开始/暂停/恢复/结束、分段完成）与错误日志，验证：CI 通过
 - [x] 4.2 [`AsrService.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/asr/AsrService.kt)、[`AsrClient.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/asr/AsrClient.kt) 接入绑定、识别事件与错误日志（含来源进程可区分），验证：CI 通过
-- [ ] 4.3 [`ModelDownloadService.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/models/ModelDownloadService.kt) 接入下载各阶段、HTTP 状态与失败原因日志，验证：CI 通过
+- [x] 4.3 [`ModelDownloadService.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/models/ModelDownloadService.kt) 接入下载各阶段、HTTP 状态与失败原因日志，验证：CI 通过
 - [ ] 4.4 端侧自检 `uv run python -m checks` 通过；CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过作为本批验收
 
 ## 5. 日志覆盖：云端整理、导出打印与 UI
