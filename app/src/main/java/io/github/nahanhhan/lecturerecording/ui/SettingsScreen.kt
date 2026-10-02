@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.cloud.CloudClient
@@ -31,6 +32,8 @@ import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun SettingsScreen(activity: MainActivity, graph: AppGraph) {
@@ -46,6 +49,7 @@ import java.io.File
     var testing by remember { mutableStateOf(false) }
     var logLevel by remember { mutableStateOf(AppLog.level()) }
     var logKb by remember { mutableStateOf(currentLogKb(activity)) }
+    var logMessage by remember { mutableStateOf("") }
     val download by graph.download.collectAsStateWithLifecycle()
     val recording by graph.recording.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
@@ -164,9 +168,25 @@ import java.io.File
                 AppLog.flush()
                 logFiles(activity).forEach { it.delete() }
                 logKb = currentLogKb(activity)
-                message = "日志已清理"
+                logMessage = "日志已清理"
             }) { Text("清理日志") }
+            OutlinedButton(onClick = {
+                AppLog.flush()
+                val exported = exportLogs(activity)
+                logKb = currentLogKb(activity)
+                if (exported == null) {
+                    logMessage = "无日志可导出"
+                } else {
+                    logMessage = "已生成 ${exported.name}"
+                    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.files", exported)
+                    activity.startActivity(Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).setType("text/plain")
+                            .putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
+                        "导出日志（可能含敏感信息）"))
+                }
+            }) { Text("导出日志") }
         }
+        if (logMessage.isNotBlank()) Text(logMessage)
         Text("版本 0.1.0-alpha · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
     }
 }
@@ -176,6 +196,17 @@ private fun logFiles(activity: MainActivity): List<File> =
 
 private fun currentLogKb(activity: MainActivity): Long =
     logFiles(activity).sumOf { it.length() } / 1024
+
+/** 归并 `files/log/*.log` 为 `cacheDir/exports/lecture-log_<时间戳>.log`（按行时间戳排序）；无内容返回 null。 */
+private fun exportLogs(activity: MainActivity): File? {
+    val lines = logFiles(activity).flatMap { it.readLines() }.sortedBy { it.take(23) }
+    if (lines.isEmpty()) return null
+    val exports = File(activity.cacheDir, "exports").apply { mkdirs() }
+    val stamp = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").format(LocalDateTime.now())
+    val file = File(exports, "lecture-log_$stamp.log")
+    file.writeText(lines.joinToString("\n", postfix = "\n"))
+    return file
+}
 
 private suspend fun testCloud(activity: MainActivity, graph: AppGraph) {
     val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)

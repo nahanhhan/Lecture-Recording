@@ -18,7 +18,7 @@
 
 - [x] 3.1 [`SettingsScreen.kt`](app/src/main/java/io/github/nahanhhan/lecturerecording/ui/SettingsScreen.kt) 最下方新增「日志」区块：None/Info/Debug 三档选择（默认 None、持久化、立即生效），Debug 档附「会记录敏感信息」提示文案，验证：CI 通过
 - [x] 3.2 「日志」区块显示「当前日志占用： xxxKB」（`files/log/*.log` 字节数换算，清理/导出后刷新）与「清理日志」按钮（清空全部日志、占用归零、可继续记录），验证：CI 通过
-- [ ] 3.3 「导出日志」按钮：归并 `files/log/*.log` 为 `cacheDir/exports/lecture-log_<时间戳>.log`，经 [`file_paths.xml`](app/src/main/res/xml/file_paths.xml) 的 `FileProvider` + `ACTION_SEND`（`text/plain`）唤起系统分享；无内容时仅提示不唤起分享，验证：CI 通过
+- [x] 3.3 「导出日志」按钮：归并 `files/log/*.log` 为 `cacheDir/exports/lecture-log_<时间戳>.log`，经 [`file_paths.xml`](app/src/main/res/xml/file_paths.xml) 的 `FileProvider` + `ACTION_SEND`（`text/plain`）唤起系统分享；无内容时仅提示不唤起分享，验证：CI 通过
 - [ ] 3.4 [`README.md`](README.md) 增补日志级别、导出与清理说明；[`verification/DEVICE_CHECKLIST.md`](verification/DEVICE_CHECKLIST.md) 增加日志级别切换、占用显示、清理、导出分享的真机核对项，验证：`uv run python -m checks` 通过且 README 变更仅涉及用户可见行为
 - [ ] 3.5 端侧自检 `uv run python -m checks` 通过；CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过作为本批验收
 
