@@ -41,4 +41,20 @@ class LoggingTest {
         assertEquals("1970-01-01 00:00:00.000 E/asr 识别失败", line)
         assertTrue(line.startsWith("1970-01-01 00:00:00.000 "), "时间戳应在行首以便导出归并：$line")
     }
+    @Test fun truncationDropsOldestAndKeepsRecentUnderLimit() {
+        val lines = (1..10).map { "line-$it".padEnd(10) }
+        val kept = truncateLogLines(lines, maxBytes = 31)
+        assertTrue(kept.isNotEmpty(), "应保留最近内容")
+        assertEquals(lines.takeLast(kept.size), kept, "保留的必须是最近条目")
+        assertTrue(kept.sumOf { it.toByteArray(Charsets.UTF_8).size + 1L } <= 31, "截断后总量应回落到上限以内")
+        assertTrue(kept.size < lines.size, "超限时应丢弃最旧内容")
+    }
+    @Test fun truncationKeepsEverythingWhenUnderLimit() {
+        val lines = listOf("a", "b", "c")
+        assertEquals(lines, truncateLogLines(lines, maxBytes = 1024))
+    }
+    @Test fun truncationKeepsLatestLineEvenIfSingleLineExceedsLimit() {
+        val lines = listOf("old", "x".repeat(100))
+        assertEquals(listOf(lines.last()), truncateLogLines(lines, maxBytes = 10))
+    }
 }

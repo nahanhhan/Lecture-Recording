@@ -70,3 +70,21 @@ fun formatLogLine(
     val body = if (configured == LogLevel.INFO) maskCredentials(message) else message
     return "${formatLogTimestamp(epochMs, zone)} $letter/$source $body"
 }
+
+/**
+ * 日志容量截断：总量超过 [maxBytes] 时丢弃最旧内容，保留最近内容（列表尾部）。
+ * 每行按 UTF-8 字节数加换行符计入总量；最新一行自身超限时仍保留该行。
+ */
+fun truncateLogLines(lines: List<String>, maxBytes: Long): List<String> {
+    require(maxBytes > 0) { "上限必须为正数" }
+    val kept = ArrayDeque<String>()
+    var total = 0L
+    for (line in lines.asReversed()) {
+        val cost = line.toByteArray(Charsets.UTF_8).size + 1L
+        if (total + cost > maxBytes && kept.isNotEmpty()) break
+        kept.addFirst(line)
+        total += cost
+        if (total > maxBytes) break
+    }
+    return kept.toList()
+}
