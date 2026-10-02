@@ -36,10 +36,10 @@ AGP 对 debug 变体默认使用 `~/.android/debug.keystore`（alias `androiddeb
 
 ## Risks / Trade-offs
 
-- [debug 密钥入库，仓库写权限者可签发同签名 debug 包] → debug 签名本无信任语义，README 注明该密钥仅用于开发调试产物分发；release 仍由本地私有密钥签名
+- [debug 密钥入库，仓库写权限者可签发同签名 debug 包] → debug 签名本无信任语义，仅用于开发调试产物分发；release 仍由本地私有密钥签名
 - [init 工作流需要 `contents: write` 才能回推提交] → 权限只给该工作流；[`android.yml`](.github/workflows/android.yml) 保持 `contents: read` 不变
 - [换行/编码转换损坏 keystore] → `.gitattributes` 标记 `*.keystore binary`（D4）
-- [本地 debug 构建与 CI 产物签名不同、互相无法覆盖安装] → 明确为 Non-Goal；README 说明边界；如日后需要，可让 Gradle 侧也加载根目录 keystore（本次刻意不做）
+- [本地 debug 构建与 CI 产物签名不同、互相无法覆盖安装] → 明确为 Non-Goal；如日后需要，可让 Gradle 侧也加载根目录 keystore（本次刻意不做）
 - [初次启用前已下载旧签名产物的用户] → 一次性卸载重装（proposal 已标 **BREAKING**）；之后升级链恢复平滑
 
 ## Migration Plan
