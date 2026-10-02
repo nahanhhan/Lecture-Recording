@@ -4,10 +4,13 @@ schema: spec-driven
 # Add only constraints that should guide OpenSpec artifacts and workflows.
 # Include constraints an agent cannot infer by reading the code.
 # Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+context: |
+  开发规矩：
+  - Kotlin/Android 验证由 CI 承担（执行 :core:test、:app:lintDebug、:app:assembleDebug 并上传测试报告与 APK）；端侧 MUST NOT 要求 Kotlin/JDK/Android SDK 环境，验证结论以 CI 结果为准。
+  - 端侧提交前自检：在 verification/checks 下执行 `uv run python -m checks` 单命令（只读、不修改被检查文件；失败以非零退出码并列出失败项与文件）。OpenSpec 工件校验用 openspec 官方命令，MUST NOT 重复实现。
+  - 任务 SHALL 按可独立验证的小批次组织，每批以对应 CI 通过作为验收；MUST NOT 要求验收者本机具备 Kotlin/Android 环境。
+  - CI 通过仅表述为工程验证（编译、测试、lint）通过，MUST NOT 呈现为真机发布验收通过；真机验收按 verification/DEVICE_CHECKLIST.md 人工执行。
+  - README 仅在存在需要通知用户的行为或约定变化时才改动；检查项增减、内部实现调整 MUST NOT 触发 README 改动。
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
