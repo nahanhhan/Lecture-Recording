@@ -4,6 +4,7 @@ import android.app.Service
 import android.content.Intent
 import android.os.*
 import com.k2fsa.sherpa.onnx.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.WavFile
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
@@ -29,8 +30,10 @@ class AsrService : Service() {
                         require(modelId in setOf("aed", "ctc"))
                         val folder = File(filesDir, "models/$modelId")
                         require(File(folder, "installed.json").exists()) { "识别模型尚未准备好" }
+                        AppLog.i("AsrService", "开始识别 model=$modelId 音频=${audio.name}")
                         if (loadedModel != modelId || recognizer == null) {
                             recognizer?.release()
+                            AppLog.i("AsrService", "加载识别模型 model=$modelId")
                             val model = OfflineModelConfig(tokens = File(folder, "tokens.txt").path,
                                 numThreads = 4, provider = "cpu", debug = false)
                             if (modelId == "aed") model.fireRedAsr = OfflineFireRedAsrModelConfig(
@@ -44,19 +47,30 @@ class AsrService : Service() {
                         try {
                             stream.acceptWaveform(WavFile.read(audio), 16000)
                             engine.decode(stream)
-                            result.putString("text", engine.getResult(stream).text)
+                            val text = engine.getResult(stream).text
+                            result.putString("text", text)
+                            AppLog.i("AsrService", "识别完成 音频=${audio.name} 字符=${text.length}")
+                            AppLog.d("AsrService", "识别结果=$text")
                         } finally { stream.release() }
-                    } catch (error: Exception) { result.putString("error", error.message ?: "识别失败") }
+                    } catch (error: Exception) {
+                        AppLog.e("AsrService", "识别失败 音频=${data.getString("path")}", error)
+                        result.putString("error", error.message ?: "识别失败")
+                    }
                     runCatching { reply.send(Message.obtain(null, 1).apply { this.data = result }) }
                 }
             }
         }
     }) }
-    override fun onBind(intent: Intent): IBinder = messenger.binder
+    override fun onBind(intent: Intent): IBinder {
+        AppLog.i("AsrService", "识别服务绑定")
+        return messenger.binder
+    }
     override fun onDestroy() {
+        AppLog.i("AsrService", "识别服务销毁")
         scope.cancel()
         // Release on the serial recognition lane, after any native call has returned.
         CoroutineScope(Dispatchers.IO).launch { lock.withLock { recognizer?.release(); recognizer = null } }
+        AppLog.flush()
         super.onDestroy()
     }
 }

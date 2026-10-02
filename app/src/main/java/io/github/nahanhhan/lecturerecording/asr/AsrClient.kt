@@ -2,6 +2,7 @@ package io.github.nahanhhan.lecturerecording.asr
 
 import android.content.*
 import android.os.*
+import io.github.nahanhhan.lecturerecording.logging.AppLog
 import kotlinx.coroutines.*
 import java.util.UUID
 
@@ -21,15 +22,18 @@ class AsrClient(private val context: Context) {
     })
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            AppLog.i("AsrClient", "识别进程已连接")
             remote = Messenger(service); binding?.complete(remote!!)
         }
         override fun onServiceDisconnected(name: ComponentName?) {
+            AppLog.e("AsrClient", "识别进程中断，录音继续保存")
             remote = null; answer?.completeExceptionally(IllegalStateException("识别进程中断，录音继续保存"))
         }
         override fun onBindingDied(name: ComponentName?) {
             onServiceDisconnected(name); close()
         }
         override fun onNullBinding(name: ComponentName?) {
+            AppLog.e("AsrClient", "无法连接识别进程")
             binding?.completeExceptionally(IllegalStateException("无法连接识别进程"))
         }
     }
@@ -44,6 +48,7 @@ class AsrClient(private val context: Context) {
     }
     suspend fun recognize(path: String, model: String): String {
         val service = connect()
+        AppLog.d("AsrClient", "发送识别请求 path=$path model=$model")
         val pending = CompletableDeferred<String>()
         withContext(Dispatchers.Main) {
             token = UUID.randomUUID().toString(); answer = pending
@@ -52,10 +57,14 @@ class AsrClient(private val context: Context) {
                 replyTo = reply
             })
         }
-        return try { withTimeout(120_000) { pending.await() } }
-        finally { withContext(NonCancellable + Dispatchers.Main) { answer = null } }
+        return try {
+            val text = withTimeout(120_000) { pending.await() }
+            AppLog.d("AsrClient", "收到识别结果 字符=${text.length}")
+            text
+        } finally { withContext(NonCancellable + Dispatchers.Main) { answer = null } }
     }
     fun close() {
+        AppLog.d("AsrClient", "断开识别进程")
         if (bound) runCatching { context.unbindService(connection) }
         bound = false; remote = null
     }
