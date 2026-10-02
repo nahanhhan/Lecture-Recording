@@ -27,6 +27,14 @@ jobs:
         run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
       - name: Prepare sherpa runtime
         run: python scripts/bootstrap.py --native
+      - name: Load static debug keystore
+        run: |
+          if [ ! -f debug.keystore ]; then
+            echo "::error::Missing static debug.keystore at repo root. Run the 'Init debug keystore' workflow once to create it."
+            exit 1
+          fi
+          mkdir -p ~/.android
+          cp debug.keystore ~/.android/debug.keystore
       - name: Verify and build
         run: |
           chmod +x gradlew
