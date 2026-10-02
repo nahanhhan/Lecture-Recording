@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -49,7 +50,7 @@ import java.io.File
         Text("端侧识别模型", style = MaterialTheme.typography.titleLarge)
         Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。若下载失败，请尝试切换下载源。", style = MaterialTheme.typography.bodyMedium)
         val switchEnabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying")
-        SingleChoiceSegmentedButtonRow {
+        SingleChoiceSegmentedButtonRow(Modifier.alpha(if (switchEnabled) 1f else 0.38f)) {
             SegmentedButton(
                 selected = source == DownloadSource.MODELSCOPE,
                 onClick = { source = DownloadSource.MODELSCOPE; graph.settings.downloadSource = DownloadSource.MODELSCOPE },
