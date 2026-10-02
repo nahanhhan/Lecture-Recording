@@ -1,31 +1,8 @@
 name: 新建 Issue
 description: 报告缺陷或提出新功能建议
-title: "[Type]: "
+title: "[Bug/Feat]: "
 labels: []
 body:
-  - type: dropdown
-    id: issue-type
-    attributes:
-      label: Issue 类型
-      description: 选择当前 issue 的类型
-      options:
-        - bug
-        - feat
-    validations:
-      required: true
-
-  - type: dropdown
-    id: priority
-    attributes:
-      label: 优先级
-      description: 选择当前 issue 的优先级
-      options:
-        - 高
-        - 中
-        - 低
-    validations:
-      required: true
-
   - type: textarea
     id: description
     attributes:
@@ -48,10 +25,11 @@ body:
       required: false
 
   - type: textarea
-    id: environment
+    id: logs
     attributes:
-      label: 环境信息
-      description: （可选）设备型号、系统版本、App 版本等
-      placeholder: 例如：Pixel 7 / Android 14 / v1.0.0
+      label: 日志上传
+      description: （可选）粘贴相关日志，或将日志文件拖拽到下方文本框中上传（可同时附上设备型号、系统版本、App 版本等环境信息）
+      placeholder: 请粘贴日志内容，或拖拽日志文件到此处...
+      render: shell
     validations:
       required: false
