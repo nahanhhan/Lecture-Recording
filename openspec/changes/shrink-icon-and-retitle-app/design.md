@@ -31,7 +31,7 @@
 2. **以变换缩放代替重算 pathData**。Android 矢量图用 `<group android:scaleX/scaleY/translateX/translateY>` 包裹七条路径（旧式图标的全幅白色背景路径留在组外）；SVG 用 `<g transform="translate(...) scale(...)">` 包裹同一组路径。变换 p' = s·p + t，以**可见墨迹外框**（654×770，中心 (582, 640)）为基准等比缩放并居中，使其长边恰为 640：s = 640/770 ≈ **0.83117**，t ≈ **(156.26, 108.05)**（精确到 ±1 视口单位即可）。基准必须取可见外框而非路径外框——右侧楔形为白色会遮挡，按路径外框（861.88 长边）缩放居中会导致可见图形左偏、留白不对称、长边仅 44.7%。替代方案"逐条改写 pathData"易错且难以核对，弃用；"改 viewport"会连背景一起缩放，无法保持白色底满幅，弃用。
 3. **预览图从同一几何参数重新生成**。[`artwork/app-icon-preview.png`](../../../../artwork/app-icon-preview.png) 优先用可直接渲染 [`app-icon.svg`](../../../../artwork/app-icon.svg) 的工具（resvg/Inkscape/浏览器导出等）重出；若端侧无渲染器，用一次性 Pillow 脚本按同一变换重绘（七形状均为圆与三角形，可解析绘制，4 倍超采样抗锯齿）。两条路径任选其一，验收以"预览图满足同一 50% 口径"为准，脚本无需入库。
 4. **通知标题同步改为「录课」**。通知标题当前就是软件名，属"软件 title"的用户可见呈现；只改启动器与顶栏会造成同一软件两个名字，弃用。
-5. **版本递增至 `0.1.2-alpha`（versionCode 3）**。本次是用户可见变更，且新产物需覆盖安装 0.1.1-alpha（versionCode 2）必须递增 versionCode；README 版本行同批修改以通过 [`version_consistency.py`](../../../../verification/checks/checks/version_consistency.py)。
+5. **仅递增 `versionName` 至 `0.1.2-alpha`，`versionCode` 保持 2**。按用户确认的口径：兼容性升级不递增 versionCode（同签名产物覆盖安装）；README 版本行同批修改以通过 [`version_consistency.py`](../../../../verification/checks/checks/version_consistency.py)。
 6. **外观验收走真机清单**。CI 只能做工程验证（编译/测试/lint），图标留白与名称显示属视觉验收，在 [`verification/DEVICE_CHECKLIST.md`](../../../../verification/DEVICE_CHECKLIST.md) 增补一条核对项，不伪造自动化外观断言。
 
 ## Risks / Trade-offs
@@ -44,4 +44,4 @@
 
 ## Migration Plan
 
-纯资源与文案变更，直接合入主干：新产物 versionCode 3 覆盖安装 0.1.1-alpha，用户数据不受影响。回滚策略为 revert 本次提交（无数据迁移、无协议变化）。
+纯资源与文案变更，直接合入主干：新产物（`versionName` 0.1.2-alpha，`versionCode` 2）覆盖安装已装版本，用户数据不受影响。回滚策略为 revert 本次提交（无数据迁移、无协议变化）。

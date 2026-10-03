@@ -17,11 +17,11 @@
 
 ## 3. 版本递增与文档同步
 
-- [ ] 3.1 将 [`app/build.gradle.kts`](../../../../app/build.gradle.kts) 升至 `versionName = "0.1.2-alpha"`、`versionCode = 3`。验证：diff 仅版本两行
-- [ ] 3.2 同步 [`README.md`](../../../../README.md)：版本行为 **0.1.2-alpha**、图标 alt 文案改为「录课图标」（用户可见名称变化）。验证：`uv run python -m checks` 中版本一致性检查通过；README 无其他改动
-- [ ] 3.3 在 [`verification/DEVICE_CHECKLIST.md`](../../../../verification/DEVICE_CHECKLIST.md) 增补一条：安装包图标在圆形/圆角遮罩下留白充足不裁切，启动器名称、顶栏与通知标题均显示「录课」。验证：清单含该条目
+- [x] 3.1 将 [`app/build.gradle.kts`](../../../../app/build.gradle.kts) 的 `versionName` 升至 `"0.1.2-alpha"`，`versionCode` 保持 `2`（用户口径：兼容性升级不递增 versionCode）。验证：diff 仅 `versionName` 一行
+- [x] 3.2 同步 [`README.md`](../../../../README.md)：版本行为 **0.1.2-alpha**、图标 alt 文案改为「录课图标」（用户可见名称变化）。验证：`uv run python -m checks` 中版本一致性检查通过；README 无其他改动
+- [x] 3.3 在 [`verification/DEVICE_CHECKLIST.md`](../../../../verification/DEVICE_CHECKLIST.md) 增补一条：安装包图标在圆形/圆角遮罩下留白充足不裁切，启动器名称、顶栏与通知标题均显示「录课」。验证：清单含该条目
 - [ ] 3.4 本批验收：在 `verification/checks` 执行 `uv run python -m checks` 全绿，推送后 CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过（工程验证口径）
 
 ## 4. 真机验收（人工）
 
-- [ ] 4.1 在目标手机安装 versionCode 3 的产物，按 [`verification/DEVICE_CHECKLIST.md`](../../../../verification/DEVICE_CHECKLIST.md) 新增项人工核对图标留白与「录课」名称显示并记录结果。验收：清单人工勾选与记录完成（真机发布验收，不由 CI 代替）
+- [ ] 4.1 在目标手机安装新产物（`versionName` 0.1.2-alpha），按 [`verification/DEVICE_CHECKLIST.md`](../../../../verification/DEVICE_CHECKLIST.md) 新增项人工核对图标留白与「录课」名称显示并记录结果。验收：清单人工勾选与记录完成（真机发布验收，不由 CI 代替）
