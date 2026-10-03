@@ -187,7 +187,7 @@ import java.time.format.DateTimeFormatter
             }) { Text("导出日志") }
         }
         if (logMessage.isNotBlank()) Text(logMessage)
-        Text("版本 0.1.0-alpha · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
+        Text("版本 ${BuildConfig.VERSION_NAME} · 资料保存在本机", style = MaterialTheme.typography.bodySmall)
     }
 }
 
