@@ -3,7 +3,6 @@ package io.github.nahanhhan.lecturerecording.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
@@ -34,24 +33,29 @@ import io.github.nahanhhan.lecturerecording.data.*
 import io.github.nahanhhan.lecturerecording.export.*
 import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.RecordingService
+import io.github.nahanhhan.lecturerecording.importing.AudioImportService
+import io.github.nahanhhan.lecturerecording.photos.PhotoImages
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable fun DetailScreen(activity: MainActivity, graph: AppGraph, id: String, onDeleted: () -> Unit = {}) {
-    val lesson by remember(id) { graph.dao.observeLesson(id) }.collectAsStateWithLifecycle(initialValue = null)
-    var loaded by rememberSaveable(id) { mutableStateOf(false) }
-    LaunchedEffect(lesson) {
-        if (lesson != null) loaded = true else if (loaded) onDeleted()
+    val lessonState by remember(id) { graph.dao.observeLesson(id).map { true to it } }
+        .collectAsStateWithLifecycle(initialValue = false to null)
+    val lesson = lessonState.second
+    LaunchedEffect(id, lessonState) {
+        if (lessonState.first && lesson == null) onDeleted()
     }
     val segments by remember(id) { graph.dao.observeSegments(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val photos by remember(id) { graph.dao.observePhotos(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val jobs by remember(id) { graph.dao.observeJobs(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val editedNote by remember(id) { graph.dao.observeEditedNote(id) }.collectAsStateWithLifecycle(initialValue = null)
     val recording by graph.recording.collectAsStateWithLifecycle()
-    var camera by remember { mutableStateOf(false) }
+    val importing by graph.importing.collectAsStateWithLifecycle()
+    var camera by rememberSaveable(id) { mutableStateOf(false) }
     var tab by remember { mutableStateOf(0) }
     var error by remember { mutableStateOf("") }
     var editSegment by remember { mutableStateOf<SegmentEntity?>(null) }
@@ -93,22 +97,29 @@ import java.io.File
     }
     val current = lesson ?: return
     val active = recording.lessonId == id
+    val importActive = importing.lessonId == id
+    val imported = current.sourceType == "import"
     val cloudRunning = jobs.any { it.status == "running" }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Row {
                 Text(current.title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
-                TextButton(enabled = !active && !cloudRunning && current.status !in setOf("recording", "paused", "processing"), onClick = { confirmDelete = true }) {
+                TextButton(enabled = !active && !importActive && !cloudRunning && current.status !in setOf("recording", "paused", "processing", "importing", "transcribing"), onClick = { confirmDelete = true }) {
                     Text("删除录音", color = MaterialTheme.colorScheme.error)
                 }
             }
             Text("${formatTime((if (active) recording.samples else current.samples) * 1000 / 16000)} · ${statusLabel(if (active) recording.status else current.status)}")
             if (current.error.isNotBlank()) Text(current.error, color = MaterialTheme.colorScheme.error)
+            if (imported) Text("导入音频只整理文字，不追加录音或拍照。", style = MaterialTheme.typography.bodySmall)
+            if (importActive) {
+                Text(importing.message, style = MaterialTheme.typography.bodyMedium)
+                OutlinedButton(onClick = { activity.startService(Intent(activity, AudioImportService::class.java).setAction(AudioImportService.CANCEL)) }) { Text("暂停音频处理") }
+            }
             if (active && recording.warning.isNotBlank()) Text(recording.warning, style = MaterialTheme.typography.bodySmall)
             if (active) {
                 Text("待处理 ${recording.queueSize} 段", style = MaterialTheme.typography.bodySmall)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (recording.status != "processing") {
+                    if (recording.status != "processing" && !imported) {
                         Button(onClick = { activity.startService(Intent(activity, RecordingService::class.java).setAction(
                             if (recording.status == "paused") RecordingService.RESUME else RecordingService.PAUSE)) }) { Text(if (recording.status == "paused") "继续" else "暂停") }
                         OutlinedButton(onClick = {
@@ -122,15 +133,20 @@ import java.io.File
                 }
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (current.status == "interrupted") OutlinedButton(enabled = recording.lessonId == null, onClick = {
+                    if (current.status == "interrupted" && !imported) OutlinedButton(enabled = recording.lessonId == null && importing.lessonId == null, onClick = {
                         activity.beginRecording(Intent(activity, RecordingService::class.java).setAction(RecordingService.START).putExtra("lesson_id", id))
                     }) { Text("继续录音") }
-                    if (segments.any { it.status != "ready" }) OutlinedButton(enabled = recording.lessonId == null && !cloudRunning, onClick = {
+                    if (!imported && segments.any { it.status != "ready" }) OutlinedButton(enabled = recording.lessonId == null && importing.lessonId == null && !cloudRunning, onClick = {
                         activity.beginRecording(Intent(activity, RecordingService::class.java).setAction(RecordingService.DRAIN).putExtra("lesson_id", id))
                     }) { Text("完成待转写段落") }
+                    if (imported && (current.status == "import_interrupted" || segments.any { it.status != "ready" })) OutlinedButton(
+                        enabled = recording.lessonId == null && importing.lessonId == null && !cloudRunning, onClick = {
+                            ContextCompat.startForegroundService(activity, Intent(activity, AudioImportService::class.java).putExtra("lesson_id", id))
+                        }) { Text(if (current.importReady) "继续转写" else "继续导入") }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(enabled = !cloudRunning && current.status !in setOf("recording", "paused", "processing"), onClick = {
+                    Button(enabled = !cloudRunning && !importActive && current.status !in setOf("recording", "paused", "processing", "importing", "transcribing") &&
+                        (!imported || (current.importReady && segments.isNotEmpty() && segments.all { it.status == "ready" })), onClick = {
                         if (!graph.settings.cloudTested) error = "请先在设置中配置并测试云端接口"
                         else {
                             AppLog.i("DetailScreen", "发起整理 lesson=$id")
@@ -151,7 +167,7 @@ import java.io.File
             if (playing) TextButton(onClick = { player.pause(); playing = false }) { Text("暂停回听") }
         }
         PrimaryTabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("原始转写与照片") })
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(if (imported) "原始转写" else "原始转写与照片") })
             Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("课堂笔记") })
         }
         if (tab == 0) {
@@ -238,8 +254,7 @@ import java.io.File
 @Composable private fun PhotoCard(graph: AppGraph, photo: PhotoEntity, enabled: Boolean, onSeek: () -> Unit, onSelect: (Boolean) -> Unit) {
     var bitmap by remember(photo.id) { mutableStateOf<android.graphics.Bitmap?>(null) }
     LaunchedEffect(photo.id) {
-        bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(File(graph.lessonDir(photo.lessonId), photo.filename).path,
-            BitmapFactory.Options().apply { inSampleSize = 4 }) }
+        bitmap = withContext(Dispatchers.IO) { runCatching { PhotoImages.decode(File(graph.lessonDir(photo.lessonId), photo.filename), 1024) }.getOrNull() }
     }
     DisposableEffect(photo.id) { onDispose { bitmap?.recycle() } }
     Card(Modifier.fillMaxWidth()) {

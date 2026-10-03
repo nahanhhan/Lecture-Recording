@@ -78,9 +78,11 @@ class RecordingService : Service() {
     private suspend fun runRecording(intent: Intent) = coroutineScope {
         val existingId = intent.getStringExtra("lesson_id")
         val lesson = graph.lessonOperations.withLock {
+            check(graph.importing.value.lessonId == null) { "请等待音频导入和转写结束" }
             val value = if (existingId != null) requireNotNull(graph.dao.lesson(existingId)) { "录音记录已删除" } else LessonEntity(
                 UUID.randomUUID().toString(), intent.getStringExtra("title")?.ifBlank { "课堂录音" } ?: "课堂录音",
                 intent.getStringExtra("course") ?: "", System.currentTimeMillis(), modelId = graph.settings.modelId)
+            check(value.sourceType != "import") { "导入音频不能追加麦克风录音，请使用音频导入流程继续转写" }
             lessonId = value.id
             graph.dao.putLesson(value.copy(status = if (intent.action == DRAIN) "processing" else "recording", error = ""))
             graph.recording.value = RecordingState(value.id, if (intent.action == DRAIN) "processing" else "recording", value.samples)

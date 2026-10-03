@@ -17,7 +17,8 @@ import javax.net.ssl.SSLException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class CloudClient(private val settings: CloudSettings, private val client: OkHttpClient = defaultClient()) {
+class CloudClient(private val settings: CloudSettings, private val client: OkHttpClient = defaultClient(),
+    private val sessionId: String = java.util.UUID.randomUUID().toString()) {
     suspend fun complete(body: JsonObject): JsonObject {
         require(settings.model.isNotBlank()) { "请填写模型名称" }
         val adapted = CloudRequests.adapt(body, settings.baseUrl, settings.strict)
@@ -35,6 +36,12 @@ class CloudClient(private val settings: CloudSettings, private val client: OkHtt
         require(key.all { it in '!'..'~' }) { "API Key 格式不正确，请检查是否包含空格、换行或中文字符" }
         return Request.Builder().url(address).header("Authorization", "Bearer $key")
             .header("Accept", "application/json")
+            .apply {
+                if (CloudProvider.detect(address) in setOf(CloudProvider.OPENCODE, CloudProvider.OPENCODE_GO)) {
+                    header("User-Agent", "RecNote/${io.github.nahanhhan.lecturerecording.BuildConfig.VERSION_NAME}")
+                    header("x-opencode-session", sessionId)
+                }
+            }
     }
 
     private suspend fun execute(request: Request): JsonObject {

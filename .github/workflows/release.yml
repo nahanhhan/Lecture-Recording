@@ -1,0 +1,46 @@
+name: Publish Android release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Prepare Android runtime
+        run: |
+          sdkmanager 'platforms;android-36' 'build-tools;36.0.0' 'ndk;27.2.12479018' 'cmake;3.22.1'
+          python scripts/bootstrap.py --native
+          test -f debug.keystore
+      - name: Verify and build optimized APK
+        run: |
+          chmod +x gradlew
+          python -m unittest discover -s scripts/tests
+          ./gradlew :core:test :app:testCompactUnitTest :app:lintCompact :app:assembleCompact --console=plain
+      - name: Publish versioned APK
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python scripts/publish_release.py --repo "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME" --commit "$(git rev-parse HEAD)" --apk app/build/outputs/apk/compact/app-compact.apk --metadata app/build/outputs/apk/compact/output-metadata.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-verification-reports
+          path: |
+            core/build/reports/tests/
+            app/build/reports/tests/
+            app/build/reports/lint-results-compact.html

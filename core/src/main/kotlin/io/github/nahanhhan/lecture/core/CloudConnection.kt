@@ -8,6 +8,7 @@ enum class CloudProvider(val id: String, val label: String, val baseUrl: String,
     DEEPSEEK("deepseek", "DeepSeek", "https://api.deepseek.com", "deepseek-flash", defaultPhotos = false),
     OPENROUTER("openrouter", "OpenRouter", "https://openrouter.ai/api/v1", "供应商/模型名称"),
     OPENCODE("opencode", "OpenCode Zen", "https://opencode.ai/zen/v1", "例如 kimi-k2.5", defaultPhotos = false),
+    OPENCODE_GO("opencode_go", "OpenCode Go", "https://opencode.ai/zen/go/v1", "例如 kimi-k3 或 glm-5.2", defaultPhotos = false),
     OPENAI("openai", "OpenAI", "https://api.openai.com/v1", "支持 Chat Completions 的模型", defaultStrict = true),
     CUSTOM("custom", "自定义", "", "服务商提供的模型名称");
 
@@ -16,7 +17,7 @@ enum class CloudProvider(val id: String, val label: String, val baseUrl: String,
         fun detect(address: String): CloudProvider = when (runCatching { URI(address.trim()).host?.lowercase() }.getOrNull()) {
             "api.deepseek.com" -> DEEPSEEK
             "openrouter.ai" -> OPENROUTER
-            "opencode.ai" -> OPENCODE
+            "opencode.ai" -> if (runCatching { URI(address.trim()).path }.getOrNull().orEmpty().startsWith("/zen/go/")) OPENCODE_GO else OPENCODE
             "api.openai.com" -> OPENAI
             else -> CUSTOM
         }

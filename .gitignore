@@ -8,6 +8,7 @@ local.properties
 *.jks
 keystore.properties
 *.apk
+*.idsig
 *.aab
 .idea/
 *.iml

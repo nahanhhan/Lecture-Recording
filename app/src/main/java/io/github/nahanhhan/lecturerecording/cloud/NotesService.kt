@@ -4,7 +4,6 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.IBinder
 import android.util.Base64
 import androidx.core.app.ServiceCompat
@@ -12,6 +11,7 @@ import androidx.room.withTransaction
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.data.*
 import io.github.nahanhhan.lecturerecording.logging.AppLog
+import io.github.nahanhhan.lecturerecording.photos.PhotoImages
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.withLock
@@ -61,13 +61,15 @@ class NotesService : Service() {
     }
     private suspend fun createJob(lessonId: String, includePhotos: Boolean): JobEntity = graph.database.withTransaction {
         val lesson = requireNotNull(graph.dao.lesson(lessonId))
-        check(lesson.status !in setOf("recording", "paused", "processing")) { "请等待录音和实时转写结束" }
+        check(lesson.status !in setOf("recording", "paused", "processing", "importing", "transcribing")) { "请等待录音或音频导入与转写结束" }
+        check(lesson.sourceType != "import" || lesson.importReady) { "请先完成音频导入和转写" }
+        check(lesson.sourceType != "import" || graph.dao.unfinishedSegments(lessonId).isEmpty()) { "请先完成导入音频的全部转写" }
         val segments = graph.dao.segments(lessonId).map { Segment(it.id, it.startMs, it.endMs,
             if (it.text.isBlank()) "【待核对：此段转写未完成】" else it.text) }
         val photos = graph.dao.photos(lessonId).filter { it.selected }.map { Photo(it.id, it.filename, it.audioTimeMs) }
         val batches = BatchPlanner.plan(lessonId, lesson.revision, lesson.course,
             graph.settings.glossary.split(',', '，', '\n').map { it.trim() }.filter { it.isNotBlank() }, segments, photos,
-            includePhotos = includePhotos)
+            includePhotos = includePhotos && lesson.sourceType != "import")
         check(batches.isNotEmpty()) { if (includePhotos) "没有可整理的文字或照片" else "没有可整理的文字；若需要整理照片，请在设置中开启并测试读图" }
         val job = JobEntity(UUID.randomUUID().toString(), lessonId, lesson.revision, protocolJson.encodeToString(batches), createdAt = System.currentTimeMillis())
         graph.dao.putJob(job)
@@ -80,7 +82,8 @@ class NotesService : Service() {
             "此任务包含照片，请开启并测试读图后继续，或发起新的文字整理任务"
         }
         val definition = assets.open("tool-definition.json").bufferedReader().use { protocolJson.parseToJsonElement(it.readText()).jsonObject }
-        val client = CloudClient(settings)
+        val client = CloudClient(settings, sessionId = job.id)
+        check(graph.dao.lesson(job.lessonId)?.sourceType != "import" || batches.all { it.photos.isEmpty() }) { "导入音频只允许文字整理" }
         graph.dao.jobStatus(job.id, "running")
         batches.forEachIndexed { index, batch ->
             currentCoroutineContext().ensureActive()
@@ -138,11 +141,7 @@ class NotesService : Service() {
     }
     companion object {
         fun encodeImage(file: File): ImageInput {
-            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-            BitmapFactory.decodeFile(file.path, bounds)
-            var sample = 1
-            while (maxOf(bounds.outWidth, bounds.outHeight) / sample > 2048) sample *= 2
-            val bitmap = requireNotNull(BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = sample })) { "照片无法读取" }
+            val bitmap = PhotoImages.decode(file)
             val bytes = ByteArrayOutputStream()
             try { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, bytes) } finally { bitmap.recycle() }
             return ImageInput("image/jpeg", Base64.encodeToString(bytes.toByteArray(), Base64.NO_WRAP))

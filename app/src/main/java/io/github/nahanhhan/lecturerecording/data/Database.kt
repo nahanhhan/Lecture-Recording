@@ -6,7 +6,9 @@ import kotlinx.coroutines.flow.Flow
 @Entity(tableName = "lessons")
 data class LessonEntity(@PrimaryKey val id: String, val title: String, val course: String,
     val createdAt: Long, val status: String = "recording", val samples: Long = 0,
-    val revision: Int = 1, val photoSequence: Long = 0, val modelId: String = "aed", val error: String = "")
+    val revision: Int = 1, val photoSequence: Long = 0, val modelId: String = "aed", val error: String = "",
+    @ColumnInfo(defaultValue = "'microphone'") val sourceType: String = "microphone",
+    @ColumnInfo(defaultValue = "0") val importReady: Boolean = false)
 
 @Entity(tableName = "chunks", indices = [Index("lessonId")])
 data class ChunkEntity(@PrimaryKey val id: String, val lessonId: String, val path: String,
@@ -39,7 +41,7 @@ interface LectureDao {
     @Query("SELECT * FROM lessons WHERE id=:id") fun observeLesson(id: String): Flow<LessonEntity?>
     @Query("SELECT * FROM lessons WHERE id=:id") suspend fun lesson(id: String): LessonEntity?
     @Query("SELECT * FROM lessons WHERE id IN (:ids)") suspend fun lessons(ids: List<String>): List<LessonEntity>
-    @Query("SELECT id FROM lessons WHERE status IN ('recording','paused','processing') UNION SELECT lessonId FROM jobs WHERE status='running'")
+    @Query("SELECT id FROM lessons WHERE status IN ('recording','paused','processing','importing','transcribing') UNION SELECT lessonId FROM jobs WHERE status='running'")
     fun observeBusyLessonIds(): Flow<List<String>>
     @Query("SELECT COUNT(*) FROM jobs WHERE lessonId IN (:ids) AND status='running'") suspend fun runningJobs(ids: List<String>): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putLesson(lesson: LessonEntity)
@@ -48,6 +50,10 @@ interface LectureDao {
     @Query("UPDATE lessons SET revision=revision+1 WHERE id=:id") suspend fun revise(id: String)
     @Query("UPDATE lessons SET photoSequence=:sequence WHERE id=:id") suspend fun setSequence(id: String, sequence: Long)
     @Query("UPDATE lessons SET status='interrupted',error='上次录音已中断，已保存的资料可继续使用' WHERE status IN ('recording','paused','processing')") suspend fun interruptOldRecordings()
+    @Query("UPDATE lessons SET status='import_interrupted',error='上次音频导入或转写已中断，可手动继续' WHERE sourceType='import' AND status IN ('importing','transcribing')") suspend fun interruptOldImports()
+    @Query("UPDATE lessons SET samples=:samples,importReady=1,status='transcribing',error='' WHERE id=:id AND sourceType='import'") suspend fun completeImport(id: String, samples: Long)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putChunks(chunks: List<ChunkEntity>)
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putSegments(segments: List<SegmentEntity>)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putChunk(chunk: ChunkEntity)
     @Query("SELECT * FROM chunks WHERE lessonId=:lessonId ORDER BY startSample") suspend fun chunks(lessonId: String): List<ChunkEntity>
     @Query("SELECT * FROM chunks") suspend fun allChunks(): List<ChunkEntity>
@@ -88,5 +94,15 @@ interface LectureDao {
 }
 
 @Database(entities = [LessonEntity::class, ChunkEntity::class, SegmentEntity::class, PhotoEntity::class,
-    JobEntity::class, NoteBatchEntity::class, EditedNoteEntity::class], version = 1, exportSchema = false)
-abstract class LectureDatabase : RoomDatabase() { abstract fun dao(): LectureDao }
+    JobEntity::class, NoteBatchEntity::class, EditedNoteEntity::class], version = 2, exportSchema = false)
+abstract class LectureDatabase : RoomDatabase() {
+    abstract fun dao(): LectureDao
+    companion object {
+        val MIGRATION_1_2 = object : androidx.room.migration.Migration(1, 2) {
+            override fun migrate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE lessons ADD COLUMN sourceType TEXT NOT NULL DEFAULT 'microphone'")
+                db.execSQL("ALTER TABLE lessons ADD COLUMN importReady INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+    }
+}

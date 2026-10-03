@@ -5,11 +5,14 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.net.Uri
+import android.provider.OpenableColumns
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -32,6 +35,7 @@ import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.RecordingService
 import io.github.nahanhhan.lecturerecording.ui.*
 import io.github.nahanhhan.lecture.core.formatTime
+import io.github.nahanhhan.lecturerecording.importing.AudioImportService
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -78,11 +82,23 @@ class MainActivity : ComponentActivity() {
     var selecting by rememberSaveable { mutableStateOf(false) }
     var selectedRecords by rememberSaveable { mutableStateOf(listOf<String>()) }
     var confirmBulkDelete by remember { mutableStateOf(false) }
+    var importUri by remember { mutableStateOf<Uri?>(null) }
+    var importName by remember { mutableStateOf("") }
     val recording by graph.recording.collectAsStateWithLifecycle()
+    val importing by graph.importing.collectAsStateWithLifecycle()
     val cloudLessonId by graph.cloudLessonId.collectAsStateWithLifecycle()
     val busyRecords by graph.dao.observeBusyLessonIds().collectAsStateWithLifecycle(initialValue = emptyList())
     val lessons by graph.dao.observeLessons().collectAsStateWithLifecycle(initialValue = emptyList())
-    val unavailable = busyRecords.toSet() + listOfNotNull(recording.lessonId, cloudLessonId)
+    val unavailable = busyRecords.toSet() + listOfNotNull(recording.lessonId, cloudLessonId, importing.lessonId)
+    val audioPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { activity.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            importName = runCatching { activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            } }.getOrNull()?.take(200) ?: "导入音频"
+            importUri = uri
+        }
+    }
     val selectable = lessons.filter { it.id !in unavailable }.map { it.id }
     LaunchedEffect(selectable) {
         selectedRecords = selectedRecords.filter { it in selectable }
@@ -119,10 +135,17 @@ class MainActivity : ComponentActivity() {
                             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text("把课堂留在身边", style = MaterialTheme.typography.headlineSmall)
                                 Text("录下讲解，拍下板书。课后整理成可回听的图文笔记。", style = MaterialTheme.typography.bodyLarge)
-                                Button(onClick = {
+                                Button(enabled = importing.lessonId == null, onClick = {
                                     if (recording.lessonId != null) { selectedId = recording.lessonId; page = "detail" }
                                     else newRecording = true
                                 }) { Icon(Icons.Default.Mic, null); Spacer(Modifier.width(8.dp)); Text(if (recording.lessonId != null) "回到当前录音" else "开始课堂录音") }
+                                OutlinedButton(enabled = recording.lessonId == null && importing.lessonId == null,
+                                    onClick = { audioPicker.launch(arrayOf("audio/*", "application/octet-stream")) }) {
+                                    Icon(Icons.Default.UploadFile, null); Spacer(Modifier.width(8.dp)); Text("导入音频文件")
+                                }
+                                if (importing.lessonId != null) TextButton(onClick = { selectedId = importing.lessonId; page = "detail" }) {
+                                    Text("查看音频处理进度")
+                                }
                             }
                         }
                     }
@@ -151,6 +174,7 @@ class MainActivity : ComponentActivity() {
                                 }
                                 Text(listOf(lesson.course, SimpleDateFormat("MM月dd日 HH:mm", Locale.CHINA).format(lesson.createdAt)).filter { it.isNotBlank() }.joinToString(" · "))
                                 Text("${formatTime(lesson.samples * 1000 / 16000)} · ${statusLabel(lesson.status)}", color = MaterialTheme.colorScheme.primary)
+                                if (lesson.sourceType == "import") Text("导入音频 · 仅文字笔记", style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }
@@ -162,6 +186,22 @@ class MainActivity : ComponentActivity() {
         onDismiss = { confirmBulkDelete = false }, onDeleted = {
             confirmBulkDelete = false; selecting = false; selectedRecords = emptyList()
         })
+    importUri?.let { uri ->
+        var title by remember(uri) { mutableStateOf(importName.substringBeforeLast('.', importName)) }
+        var course by remember(uri) { mutableStateOf("") }
+        AlertDialog(onDismissRequest = { importUri = null }, title = { Text("导入音频") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(importName)
+                OutlinedTextField(title, { title = it }, label = { Text("标题") }, singleLine = true)
+                OutlinedTextField(course, { course = it }, label = { Text("课程名称") }, singleLine = true)
+                Text("支持 MP3、AAC、WAV、M4A，单文件最多 4 GB、24 小时。音频在本机转写，可回听并整理文字笔记。此记录不能追加录音或拍照。")
+            }
+        }, confirmButton = { TextButton(enabled = recording.lessonId == null && importing.lessonId == null, onClick = {
+            ContextCompat.startForegroundService(activity, Intent(activity, AudioImportService::class.java)
+                .putExtra("uri", uri.toString()).putExtra("title", title).putExtra("course", course))
+            importUri = null
+        }) { Text("导入并转写") } }, dismissButton = { TextButton(onClick = { importUri = null }) { Text("取消") } })
+    }
     if (newRecording) {
         var title by remember { mutableStateOf("课堂录音") }
         var course by remember { mutableStateOf("") }
@@ -180,5 +220,6 @@ class MainActivity : ComponentActivity() {
 fun statusLabel(status: String): String = when (status) {
     "recording" -> "正在录音"; "paused" -> "已暂停"; "processing" -> "正在完成转写"
     "completed" -> "已完成"; "interrupted" -> "已中断，可恢复"; "running" -> "正在整理"
+    "importing" -> "正在导入音频"; "transcribing" -> "正在转写导入音频"; "import_interrupted" -> "音频处理待继续"
     "waiting" -> "等待继续"; "pending" -> "待转写"; "ready" -> "已转写"; "error" -> "待核对"; else -> status
 }

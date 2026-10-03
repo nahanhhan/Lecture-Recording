@@ -4,7 +4,7 @@
 
 一款安卓课堂/会议录音工具：录音和拍照 → 手机本地转写 → 手动云端整理 → 图文笔记 → PDF / Markdown。
 
-当前版本为 **0.1.4-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
+当前版本为 **0.1.5-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
 
 ## 已实现
 
@@ -13,16 +13,18 @@
 - 独立 `:asr` 进程中的 sherpa-onnx 1.12.27，默认 FireRedASR2 AED INT8，备用 CTC；最多 15 秒短段识别，临时结果合并以控制积压。
 - App 内模型下载、HTTP Range 续传、固定 SHA-256 校验、原生解压、校验/安装进度及文件校验清单；文件哈希随解压写入计算，减少重复读盘。
 - 详情页删除录音；列表长按或点击「多选」后全选、批量删除。录音、照片、原稿、笔记及本地导出缓存一并清理，处理中记录暂不允许删除。
+- 导入 MP3、AAC、WAV、M4A，转换为 16 kHz 单声道短段，在本机转写、回听与整理文字笔记；不要求麦克风权限，不追加录音或照片。导入/转写中断后可手动继续。
+- 模型配置预设默认提供「预设一」「预设二」，支持新增和重命名；旧配置保留，各预设保存独立配置、加密密钥和测试状态。
 - CameraX 拍照，按音频样本计时，保留原图、拍摄日期、课堂内序号和固定 `ast_` 文件名。
 - 段落/照片回听、原稿编辑、照片选择、云端来源版本快照。
 - HTTPS Chat Completions 工具调用、严格结构与来源校验、数据库事务、批次幂等保存、工具回执和手动恢复。
-- DeepSeek、OpenRouter、OpenCode Zen、OpenAI 和自定义供应商入口，各自加密保存密钥及配置；可读取供应商模型列表或手动填写。
+- DeepSeek、OpenRouter、OpenCode Zen、OpenCode Go、OpenAI 和自定义供应商入口，各自加密保存密钥及配置；可读取供应商模型列表或手动填写。
 - 基础地址及完整 `/chat/completions` 地址自动规范化；连接、文字笔记保存、读图分步测试，失败时显示供应商原因和 HTTP 状态，不发送课堂材料。
 - 可关闭「让模型读取照片内容」以只整理文字，照片仍按拍照时的录音时间插入对应笔记小节，不依赖读图模型。DeepSeek 自动使用兼容参数并关闭思考模式，应用仍严格校验结构和来源。
 - 离线 Markdown、表格、代码和 KaTeX 公式阅读；Android 保存为 PDF；Markdown 与原图 ZIP 分享。
 - 设置页最下方「日志」区块：级别三档 `None` / `Info` / `Debug`（默认 `None` 不记录；`Info` 记录关键事件并自动脱敏凭据；`Debug` 记录全部细节，会记录敏感信息，抓问题后请切回），显示当前日志占用，「清理日志」一键删除全部日志，「导出日志」把主进程与识别进程日志归并为单个 `.log` 经系统分享发出（可能含敏感信息，仅发给开发者排查问题）。
 
-首版不提供账号、云同步、设备内录、音频导入、独立问答或整堂课二次识别。当前分段采用轻量音量阈值；嘈杂课堂、口音、耗电和实际延迟必须通过真机测试调整。
+首版不提供账号、云同步、设备内录、独立问答或整堂课二次识别。当前分段采用轻量音量阈值；嘈杂课堂、口音、耗电和实际延迟必须通过真机测试调整。
 
 ## 构建
 
@@ -39,7 +41,7 @@ Windows 使用 `gradlew.bat`。设置 `ANDROID_HOME`，或在未提交的 `local
 
 KaTeX 静态文件已经随源码保存。重新获取时运行 `python scripts/fetch_math_assets.py`，脚本核对 npm 发布的完整性校验值。
 
-GitHub Actions 自动执行核心测试、Android 静态检查和构建，APK 可在成功工作流的 `lecture-recording-debug` 构建产物中下载。
+GitHub Actions 自动执行核心测试、Android 静态检查和构建。每个发布版本都在 [GitHub Releases](https://github.com/nahanhhan/RecNote/releases) 提供 APK；标签 `v<versionName>` 触发验证、体积优化与自动发布。新的优化包沿用仓库固定签名。调试包也可在成功工作流的 `lecture-recording-debug` 产物中下载。
 
 ## 私有签名
 
@@ -64,6 +66,10 @@ keyPassword=YOUR_LOCAL_PASSWORD
 4. 在设置中选择云端供应商，填写模型名称和它提供的 API Key，再测试连接。只整理文字时关闭「让模型读取照片内容」；读图还需所选模型支持图片。
 5. 核对原稿和照片，手动整理笔记，完成后编辑、回听和导出。
 
+首页「导入音频文件」支持 MP3、AAC（ADTS）、WAV（PCM）和 M4A（常见 AAC 编码）。实际编码需设备支持，单文件最多 4 GB、24 小时，转换与转写期间需足够本机空间。导入记录只整理文字，不进入拍照流程。
+
+横屏拍照跟随设备方向；缩略图、模型输入与浏览器阅读遵循照片方向信息，原图保留。
+
 普通锁屏与切换页面由前台服务维持；系统强制停止、关机或权限撤销属于中断。再次打开会修复已写入 WAV 文件头、保留未完成任务，并由用户继续操作。
 
 ## 云端供应商
@@ -72,13 +78,14 @@ keyPassword=YOUR_LOCAL_PASSWORD
 | --- | --- | --- |
 | DeepSeek | `https://api.deepseek.com` | `/v1` 地址也可手动填写；使用非思考模式的工具调用，不发送 `strict` 或 `parallel_tool_calls`。模型能力以实际测试为准。 |
 | OpenRouter | `https://openrouter.ai/api/v1` | 模型名一般为 `供应商/模型`；模型列表提供能力信息时显示读图和工具调用提示。 |
+| OpenCode Go | `https://opencode.ai/zen/go/v1` | Go / Go Plus 套餐；使用 Go 的密钥、Chat Completions 模型，不加 `opencode-go/` 前缀。带真实应用身份和稳定会话编号。官方面向编程代理，课堂整理能否使用需实际账号测试。 |
 | OpenCode Zen | `https://opencode.ai/zen/v1` | 使用 Zen API Key；模型名不加 `opencode/`。仅接入其 Chat Completions 模型；Responses、Anthropic、Gemini 专用端点暂不支持。 |
 | OpenAI | `https://api.openai.com/v1` | 选择支持 Chat Completions 工具调用的模型。仅支持 Responses 的模型暂不支持。 |
 | 自定义 | 手动填写 | 支持 HTTPS Chat Completions，保留网关路径；不自动猜测或添加 `/v1`。 |
 
 供应商切换不会把上一家的密钥带到另一家。修改地址、模型、密钥、照片或严格模式后，需要重新测试；旧版配置会迁移并要求重新测试。恢复旧图文任务时必须启用已测试的读图配置，避免在文字模式下继续上传照片。
 
-官方接口说明：[DeepSeek](https://api-docs.deepseek.com/)、[DeepSeek 工具调用](https://api-docs.deepseek.com/guides/tool_calls/)、[OpenRouter](https://openrouter.ai/docs/quickstart)、[OpenCode Zen](https://opencode.ai/docs/zen/)。
+官方接口说明：[DeepSeek](https://api-docs.deepseek.com/)、[DeepSeek 工具调用](https://api-docs.deepseek.com/guides/tool_calls/)、[OpenRouter](https://openrouter.ai/docs/quickstart)、[OpenCode Zen](https://opencode.ai/docs/zen/)、[OpenCode Go](https://opencode.ai/docs/go/)。
 
 ## 工程结构
 

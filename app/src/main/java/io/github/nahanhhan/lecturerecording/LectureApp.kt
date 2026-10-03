@@ -14,21 +14,24 @@ data class RecordingState(val lessonId: String? = null, val status: String = "id
     val preview: String = "", val queueSize: Int = 0, val warning: String = "")
 data class DownloadState(val modelId: String = "", val bytes: Long = 0, val total: Long = 0,
     val status: String = "idle", val error: String = "")
+data class ImportState(val lessonId: String? = null, val status: String = "idle", val message: String = "", val samples: Long = 0)
 
 class AppGraph(val app: Application) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    val database = Room.databaseBuilder(app, LectureDatabase::class.java, "lectures.db").build()
+    val database = Room.databaseBuilder(app, LectureDatabase::class.java, "lectures.db")
+        .addMigrations(LectureDatabase.MIGRATION_1_2).build()
     val dao = database.dao()
     val settings = SettingsStore(app)
     val recording = MutableStateFlow(RecordingState())
     val cloudLessonId = MutableStateFlow<String?>(null)
+    val importing = MutableStateFlow(ImportState())
     val lessonOperations = Mutex()
     val recordings = RecordingRepository(this)
     val download = MutableStateFlow(DownloadState())
     fun lessonDir(id: String) = File(app.filesDir, "lessons/$id").apply { mkdirs() }
     val initialized = scope.async {
         recordings.recoverDeletions()
-        dao.interruptOldRecordings(); dao.interruptOldJobs()
+        dao.interruptOldRecordings(); dao.interruptOldImports(); dao.interruptOldJobs()
         dao.allChunks().forEach { chunk ->
             val file = File(chunk.path)
             if (file.exists()) {

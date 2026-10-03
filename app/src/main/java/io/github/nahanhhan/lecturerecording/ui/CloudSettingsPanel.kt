@@ -19,6 +19,12 @@ import kotlinx.coroutines.*
 
 @Composable fun CloudSettingsPanel(activity: MainActivity, graph: AppGraph) {
     var draft by remember { mutableStateOf(graph.settings.cloud()) }
+    var presets by remember { mutableStateOf(graph.settings.presets()) }
+    val presetDrafts = remember { mutableMapOf<String, CloudSettings>() }
+    var presetMenu by remember { mutableStateOf(false) }
+    var renaming by remember { mutableStateOf(false) }
+    var presetName by remember { mutableStateOf("") }
+    var renameError by remember { mutableStateOf("") }
     val drafts = remember { mutableMapOf<CloudProvider, CloudSettings>() }
     var providerMenu by remember { mutableStateOf(false) }
     var modelChoices by remember { mutableStateOf<List<CloudModel>?>(null) }
@@ -33,13 +39,52 @@ import kotlinx.coroutines.*
     Text("云端笔记整理", style = MaterialTheme.typography.titleLarge)
     Text("选择供应商并填写它提供的模型名称和密钥。课堂资料只在手动整理时发送；连接测试仅使用人工生成的材料。")
     Box {
+        OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("cloud-preset"), onClick = { presetMenu = true }) {
+            Text("配置预设：${presets.firstOrNull { it.id == draft.presetId }?.name.orEmpty()} ▾")
+        }
+        DropdownMenu(expanded = presetMenu, onDismissRequest = { presetMenu = false }) {
+            presets.forEach { preset ->
+                DropdownMenuItem(text = { Text(preset.name) }, onClick = {
+                    presetDrafts[draft.presetId] = draft
+                    graph.settings.activatePreset(preset.id)
+                    draft = presetDrafts[preset.id] ?: graph.settings.cloud()
+                    drafts.clear(); checks = emptyList(); presetMenu = false
+                    message = "已切换到 ${preset.name}。修改配置后需保存并测试。"
+                })
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(enabled = !busy, onClick = {
+            try {
+                val added = graph.settings.addPreset()
+                presetDrafts[draft.presetId] = draft
+                graph.settings.activatePreset(added.id)
+                presets = graph.settings.presets(); draft = graph.settings.cloud()
+                drafts.clear(); checks = emptyList(); message = "已新增预设，请填写并保存配置"
+            } catch (error: Exception) { message = error.message.orEmpty() }
+        }) { Text("新增预设") }
+        TextButton(enabled = !busy, modifier = Modifier.testTag("rename-preset"), onClick = {
+            presetName = presets.first { it.id == draft.presetId }.name; renameError = ""; renaming = true
+        }) { Text("重命名预设") }
+    }
+    if (renaming) AlertDialog(onDismissRequest = { renaming = false }, title = { Text("重命名预设") }, text = {
+        Column {
+            OutlinedTextField(presetName, { presetName = it }, label = { Text("预设名称") }, singleLine = true, modifier = Modifier.testTag("preset-name"))
+            if (renameError.isNotBlank()) Text(renameError, color = MaterialTheme.colorScheme.error)
+        }
+    }, confirmButton = { TextButton(onClick = {
+        try { graph.settings.renamePreset(draft.presetId, presetName); presets = graph.settings.presets(); renaming = false }
+        catch (error: Exception) { renameError = error.message.orEmpty() }
+    }) { Text("确定") } }, dismissButton = { TextButton(onClick = { renaming = false }) { Text("取消") } })
+    Box {
         OutlinedButton(enabled = !busy, modifier = Modifier.fillMaxWidth().testTag("cloud-provider"),
             onClick = { providerMenu = true }) { Text("模型供应商：${draft.provider.label} ▾") }
         DropdownMenu(expanded = providerMenu, onDismissRequest = { providerMenu = false }) {
             CloudProvider.entries.forEach { provider ->
                 DropdownMenuItem(text = { Text(provider.label) }, onClick = {
                     drafts[draft.provider] = draft
-                    draft = drafts[provider] ?: graph.settings.cloud(provider)
+                    draft = (drafts[provider] ?: graph.settings.cloud(provider)).copy(presetId = draft.presetId)
                     checks = emptyList(); message = "已切换供应商，保存并测试后生效"; providerMenu = false
                 })
             }
@@ -69,6 +114,9 @@ import kotlinx.coroutines.*
     }) { Text("获取可用模型") }
     if (draft.provider == CloudProvider.OPENCODE) Text(
         "这里接入 OpenCode Zen 云端服务。请使用 Zen 的密钥及支持 Chat Completions 的模型；模型名不加 opencode/ 前缀。",
+        style = MaterialTheme.typography.bodySmall)
+    if (draft.provider == CloudProvider.OPENCODE_GO) Text(
+        "使用 Go 或 Go Plus 套餐的密钥，模型名不加 opencode-go/。当前支持 Kimi、GLM 等使用 Chat Completions 的模型。Go 主要面向编程代理，课堂整理请求能否使用需由供应商的限制和连接测试确认。",
         style = MaterialTheme.typography.bodySmall)
     Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { edited(draft.copy(includePhotos = !draft.includePhotos)) }) {
         Checkbox(draft.includePhotos, { edited(draft.copy(includePhotos = it)) }, enabled = !busy,

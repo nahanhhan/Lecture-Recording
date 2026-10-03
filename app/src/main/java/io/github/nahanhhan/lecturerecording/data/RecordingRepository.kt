@@ -28,8 +28,8 @@ class RecordingRepository(private val graph: AppGraph) {
             try {
                 graph.database.withTransaction {
                     val records = requested.chunked(500).flatMap { graph.dao.lessons(it) }
-                    check(records.none { it.status in setOf("recording", "paused", "processing") ||
-                        it.id == graph.recording.value.lessonId || it.id == graph.cloudLessonId.value }) {
+                    check(records.none { it.status in setOf("recording", "paused", "processing", "importing", "transcribing") ||
+                        it.id == graph.recording.value.lessonId || it.id == graph.cloudLessonId.value || it.id == graph.importing.value.lessonId }) {
                         "正在录音、转写或整理的记录暂不能删除，请等待任务结束"
                     }
                     check(requested.chunked(500).all { graph.dao.runningJobs(it) == 0 }) { "笔记整理尚未结束，请稍后删除" }

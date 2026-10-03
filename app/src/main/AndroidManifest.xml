@@ -18,6 +18,7 @@
             <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
         </activity>
         <service android:name=".recording.RecordingService" android:exported="false" android:foregroundServiceType="microphone" android:stopWithTask="false" />
+        <service android:name=".importing.AudioImportService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".asr.AsrService" android:exported="false" android:process=":asr" />
         <service android:name=".cloud.NotesService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />
         <service android:name=".models.ModelDownloadService" android:exported="false" android:foregroundServiceType="dataSync" android:stopWithTask="false" />

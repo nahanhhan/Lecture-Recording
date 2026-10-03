@@ -1,6 +1,7 @@
 package io.github.nahanhhan.lecturerecording.ui
 
 import android.content.Context
+import android.view.OrientationEventListener
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -18,6 +19,7 @@ import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.data.PhotoEntity
 import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.PhotoFilename
+import io.github.nahanhhan.lecture.core.CameraRotation
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.UUID
@@ -38,6 +40,7 @@ import java.util.UUID
         future.addListener({
             if (!disposed) try {
                 val camera = future.get(); provider = camera
+                capture.targetRotation = preview.display?.rotation ?: capture.targetRotation
                 val cameraPreview = Preview.Builder().build().apply { surfaceProvider = preview.surfaceProvider }
                 camera.unbindAll(); camera.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, cameraPreview, capture)
                 AppLog.i("CameraScreen", "相机已打开 lesson=$lessonId")
@@ -46,7 +49,13 @@ import java.util.UUID
                 error = exception.message ?: "无法打开相机"
             }
         }, executor)
-        onDispose { disposed = true; provider?.unbindAll() }
+        val orientation = object : OrientationEventListener(context) {
+            override fun onOrientationChanged(degrees: Int) {
+                CameraRotation.fromOrientation(degrees)?.let { capture.targetRotation = it }
+            }
+        }
+        if (orientation.canDetectOrientation()) orientation.enable()
+        onDispose { disposed = true; orientation.disable(); provider?.unbindAll() }
     }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AndroidView(factory = { preview }, modifier = Modifier.weight(1f).fillMaxWidth())
@@ -57,12 +66,14 @@ import java.util.UUID
             Button(enabled = provider != null && !busy && recording.lessonId == lessonId, onClick = {
                 val audioMs = graph.recording.value.samples * 1000 / 16000
                 val capturedAt = System.currentTimeMillis()
+                val targetRotation = capture.targetRotation
                 busy = true; error = ""
                 graph.scope.launch {
                     var file: File? = null
                     try {
                         val pair = graph.database.withTransaction {
                             val lesson = requireNotNull(graph.dao.lesson(lessonId))
+                            check(lesson.sourceType != "import") { "导入音频不能追加照片" }
                             var sequence = lesson.photoSequence + 1
                             var target = File(graph.lessonDir(lessonId), PhotoFilename.create(audioMs, sequence))
                             while (!target.createNewFile()) { sequence++; target = File(graph.lessonDir(lessonId), PhotoFilename.create(audioMs, sequence)) }
@@ -71,13 +82,14 @@ import java.util.UUID
                         }
                         file = pair.first
                         withContext(Dispatchers.Main) {
+                            capture.targetRotation = targetRotation
                             capture.takePicture(ImageCapture.OutputFileOptions.Builder(pair.first).build(), executor,
                                 object : ImageCapture.OnImageSavedCallback {
                                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                                         graph.scope.launch {
                                             try {
                                                 graph.database.withTransaction {
-                                                    check(graph.dao.lesson(lessonId) != null) { "录音记录已删除" }
+                                                    check(graph.dao.lesson(lessonId)?.sourceType == "microphone") { "当前记录不能添加照片" }
                                                     graph.dao.putPhoto(PhotoEntity(UUID.randomUUID().toString(), lessonId, pair.first.name, audioMs, capturedAt, pair.second))
                                                     graph.dao.revise(lessonId)
                                                 }

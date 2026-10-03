@@ -19,7 +19,7 @@ class CloudClientTest {
     private lateinit var settings: CloudSettings
     @Before fun start() {
         val certificate = HeldCertificate.Builder().commonName("localhost").addSubjectAlternativeName("localhost")
-            .addSubjectAlternativeName("127.0.0.1").addSubjectAlternativeName("::1").build()
+            .addSubjectAlternativeName("127.0.0.1").addSubjectAlternativeName("::1").addSubjectAlternativeName("opencode.ai").build()
         val serverTls = HandshakeCertificates.Builder().heldCertificate(certificate).build()
         val clientTls = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
         server = MockWebServer().apply { useHttps(serverTls.sslSocketFactory(), false); start() }
@@ -58,6 +58,21 @@ class CloudClientTest {
             Assert.assertFalse(error.message!!.contains("fixture-secret"))
         }
         Assert.assertEquals(0, server.requestCount)
+    }
+    @Test fun goUsesRealAppIdentityAndStableSessionForEveryRequest() = runBlocking {
+        val local = client.newBuilder().dns(object : okhttp3.Dns {
+            override fun lookup(hostname: String) = listOf(java.net.InetAddress.getByName("127.0.0.1"))
+        }).build()
+        val base = server.url("/zen/go/v1").newBuilder().host("opencode.ai").build().toString()
+        val go = CloudClient(settings.copy(baseUrl = base, provider = io.github.nahanhhan.lecture.core.CloudProvider.OPENCODE_GO), local, "fixture-session")
+        repeat(2) {
+            server.enqueue(MockResponse().setBody("{\"choices\":[]}"))
+            go.complete(buildJsonObject { put("model", settings.model) })
+            val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+            Assert.assertEquals("/zen/go/v1/chat/completions", request.path)
+            Assert.assertTrue(request.getHeader("User-Agent")!!.startsWith("RecNote/"))
+            Assert.assertEquals("fixture-session", request.getHeader("x-opencode-session"))
+        }
     }
     @Test fun successfulHttpWithEmbeddedErrorAndHtmlAreRejected() = runBlocking {
         server.enqueue(MockResponse().setBody("""{"error":{"code":429,"message":"quota"}}"""))

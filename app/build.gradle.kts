@@ -16,8 +16,8 @@ android {
         applicationId = "io.github.nahanhhan.lecturerecording"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.4-alpha"
+        versionCode = 5
+        versionName = "0.1.5-alpha"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += providers.gradleProperty("testAbi").getOrElse("arm64-v8a") }
     }
@@ -63,6 +63,13 @@ android {
         }
         buildTypes.getByName("release").signingConfig = signingConfigs.getByName("privateRelease")
     }
+    buildTypes.create("compact") {
+        initWith(buildTypes.getByName("release"))
+        signingConfig = signingConfigs.getByName("debug")
+        isDebuggable = false
+        matchingFallbacks += "release"
+        if (providers.gradleProperty("isolatedTest").isPresent) applicationIdSuffix = ".compacttest"
+    }
 }
 dependencies {
     implementation(project(":core"))
@@ -74,6 +81,7 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.9.2")
     implementation("androidx.core:core-ktx:1.16.0")
+    implementation("androidx.exifinterface:exifinterface:1.4.1")
     implementation("androidx.room:room-runtime:2.7.2")
     implementation("androidx.room:room-ktx:2.7.2")
     kapt("androidx.room:room-compiler:2.7.2")
