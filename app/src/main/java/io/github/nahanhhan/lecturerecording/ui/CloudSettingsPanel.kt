@@ -73,10 +73,11 @@ import kotlinx.coroutines.*
     Row(Modifier.fillMaxWidth().clickable(enabled = !busy) { edited(draft.copy(includePhotos = !draft.includePhotos)) }) {
         Checkbox(draft.includePhotos, { edited(draft.copy(includePhotos = it)) }, enabled = !busy,
             modifier = Modifier.testTag("cloud-photos"))
-        Text("同时整理照片", Modifier.padding(top = 14.dp))
+        Text("让模型读取照片内容", Modifier.padding(top = 14.dp))
     }
-    Text(if (draft.includePhotos) "所选模型需要能读图。整理时发送选定照片。" else
-        "只发送转写文字。照片保留在本机，并附在笔记末尾。", style = MaterialTheme.typography.bodySmall)
+    Text("照片始终按拍照时的录音时间关联文字，不需要模型读图。", style = MaterialTheme.typography.bodySmall)
+    Text(if (draft.includePhotos) "额外让模型理解板书、PPT 等图片内容，需要支持读图的模型，并发送选定照片。" else
+        "只发送转写文字，照片留在本机并自动插入对应时间文字所在的笔记小节。", style = MaterialTheme.typography.bodySmall)
     Row(Modifier.fillMaxWidth().clickable(enabled = !busy && !deepseek) { edited(draft.copy(strict = !draft.strict)) }) {
         Checkbox(draft.strict && !deepseek, { edited(draft.copy(strict = it)) }, enabled = !busy && !deepseek)
         Text("严格参数模式", Modifier.padding(top = 14.dp))
@@ -111,7 +112,7 @@ import kotlinx.coroutines.*
                 catch (error: Exception) {
                     message = "${error.message ?: "连接测试失败"}。" +
                         if (checks.any { it.stage == "读图与图文笔记" && it.state == "failed" })
-                            "文字整理已通过，可以关闭‘同时整理照片’后重新测试。" else "请查看失败步骤的说明。"
+                            "文字整理已通过，可以关闭‘让模型读取照片内容’后重新测试。" else "请查看失败步骤的说明。"
                 } finally { busy = false }
             }
         }) { Text(if (busy) "处理中…" else "测试连接") }

@@ -11,23 +11,22 @@ object NotesRenderer {
     fun markdown(notes: List<Notes>, segments: List<SegmentEntity>, photos: List<PhotoEntity>): String {
         if (notes.isEmpty()) return ""
         val segmentMap = segments.associateBy { it.id }
-        val photoMap = photos.associateBy { it.id }
-        val used = mutableSetOf<String>()
+        val placement = PhotoPlacement.arrange(notes,
+            segments.map { Segment(it.id, it.startMs, it.endMs, it.text) },
+            photos.map { Photo(it.id, it.filename, it.audioTimeMs) })
         val result = buildString {
             append("# ").append(notes.first().title).append("\n\n")
-            notes.forEach { batch -> batch.sections.forEach { section ->
+            notes.flatMap { it.sections }.forEachIndexed { index, section ->
                 append("## ").append(section.heading).append("\n\n").append(section.markdown).append("\n\n")
                 val sources = section.sourceSegmentIds.mapNotNull { segmentMap[it] }
                 if (sources.isNotEmpty()) append("来源：").append(sources.joinToString("、") { formatTime(it.startMs) }).append("\n\n")
-                section.photoIds.mapNotNull { photoMap[it] }.forEach { photo ->
+                placement.sections[index].forEach { photo ->
                     append("![课堂照片 ").append(formatTime(photo.audioTimeMs)).append("](").append(photo.filename).append(")\n\n")
-                    used += photo.id
                 }
-            } }
-            val unused = photos.filter { it.id !in used }
-            if (unused.isNotEmpty()) {
+            }
+            if (placement.remaining.isNotEmpty()) {
                 append("## 其他课堂照片\n\n")
-                unused.forEach { append("![课堂照片 ").append(formatTime(it.audioTimeMs)).append("](").append(it.filename).append(")\n\n") }
+                placement.remaining.forEach { append("![课堂照片 ").append(formatTime(it.audioTimeMs)).append("](").append(it.filename).append(")\n\n") }
             }
         }
         AppLog.d("NotesRenderer") { "生成 Markdown ${result.length} 字" }

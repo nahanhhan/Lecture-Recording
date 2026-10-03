@@ -108,9 +108,15 @@ class CloudSettingsIntegrationTest {
         Assert.assertFalse(requests.any { it.toString().contains("image_url") || it.toString().contains("test_photo") })
         Assert.assertEquals(listOf("passed", "passed", "skipped"), results.filter { it.state != "checking" }.map { it.state })
         Assert.assertFalse(app.cacheDir.listFiles()!!.any { it.name.startsWith("cloud-test-") })
-        val photo = PhotoEntity("local_photo", "lesson", "ast_000000000_001.jpg", 0, 0, 1)
-        val markdown = NotesRenderer.markdown(listOf(Notes("橡树", listOf(NoteSection("内容", "课堂文字", emptyList(), emptyList())))), emptyList(), listOf(photo))
-        Assert.assertTrue(markdown.contains("其他课堂照片") && markdown.contains(photo.filename))
+        val photo = PhotoEntity("local_photo", "lesson", "ast_000000500_001.jpg", 500, 0, 1)
+        val sections = listOf(NoteSection("橡树", "课堂文字", listOf("s1"), emptyList()),
+            NoteSection("下一段", "后面的课堂文字", listOf("s2"), emptyList()))
+        val sources = listOf(SegmentEntity("s1", "lesson", 0, 1000, "", "课堂文字"),
+            SegmentEntity("s2", "lesson", 2000, 3000, "", "后面的课堂文字"))
+        val markdown = NotesRenderer.markdown(listOf(Notes("橡树", sections)), sources, listOf(photo))
+        Assert.assertTrue(markdown.contains(photo.filename))
+        Assert.assertTrue(markdown.indexOf(photo.filename) < markdown.indexOf("## 下一段"))
+        Assert.assertFalse(markdown.contains("其他课堂照片"))
     }
 
     @Test fun imageFailurePreservesSuccessfulTextStepWithoutApprovingConfiguration() = runBlocking {

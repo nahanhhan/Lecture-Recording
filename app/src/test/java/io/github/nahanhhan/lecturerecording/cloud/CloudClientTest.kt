@@ -50,6 +50,15 @@ class CloudClientTest {
             Assert.assertFalse(error.message!!.contains("fixture-key"))
         }
     }
+    @Test fun malformedKeyFailsBeforeHeadersCanExposeIt() = runBlocking {
+        val brokenKey = "fixture-secret\nvalue"
+        try { CloudClient(settings.copy(key = brokenKey), client).complete(buildJsonObject { }); Assert.fail() }
+        catch (error: IllegalArgumentException) {
+            Assert.assertTrue(error.message!!.contains("API Key 格式"))
+            Assert.assertFalse(error.message!!.contains("fixture-secret"))
+        }
+        Assert.assertEquals(0, server.requestCount)
+    }
     @Test fun successfulHttpWithEmbeddedErrorAndHtmlAreRejected() = runBlocking {
         server.enqueue(MockResponse().setBody("""{"error":{"code":429,"message":"quota"}}"""))
         try { CloudClient(settings, client).complete(buildJsonObject { }); Assert.fail() }

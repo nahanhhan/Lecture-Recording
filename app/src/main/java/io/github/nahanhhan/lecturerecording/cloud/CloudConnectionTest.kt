@@ -77,7 +77,7 @@ class CloudConnectionTest(private val context: Context, private val settings: Cl
             messages[1] = JsonObject(user + ("content" to JsonArray(contents)))
             saveRoundtrip(JsonObject(initial + ("messages" to JsonArray(messages))), batch) { notes ->
                 check((notes.title + notes.sections.joinToString { it.markdown }).contains("7") &&
-                    notes.sections.any { "test_photo" in it.photoIds }) { "模型未正确读取测试图片，可以关闭‘同时整理照片’后使用文字整理" }
+                    notes.sections.any { "test_photo" in it.photoIds }) { "模型未正确读取测试图片，可以关闭‘让模型读取照片内容’后使用文字整理" }
             }
         } else report(CloudCheck("读图与图文笔记", "skipped", "当前只整理文字，不发送照片"))
     }

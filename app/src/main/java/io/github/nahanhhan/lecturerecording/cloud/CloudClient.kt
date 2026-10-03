@@ -31,7 +31,9 @@ class CloudClient(private val settings: CloudSettings, private val client: OkHtt
 
     private fun request(address: String): Request.Builder {
         require(settings.key.isNotBlank()) { "请填写当前供应商的 API Key" }
-        return Request.Builder().url(address).header("Authorization", "Bearer ${settings.key.trim()}")
+        val key = settings.key.trim()
+        require(key.all { it in '!'..'~' }) { "API Key 格式不正确，请检查是否包含空格、换行或中文字符" }
+        return Request.Builder().url(address).header("Authorization", "Bearer $key")
             .header("Accept", "application/json")
     }
 

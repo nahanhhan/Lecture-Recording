@@ -249,7 +249,7 @@ import java.io.File
             Row {
                 TextButton(onClick = onSeek) { Text("从此处回听") }
                 Checkbox(checked = photo.selected, onCheckedChange = onSelect, enabled = enabled)
-                Text("用于云端整理", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.bodySmall)
+                Text("供模型读取内容", Modifier.padding(top = 14.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
     }
