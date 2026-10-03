@@ -77,6 +77,7 @@ import java.util.UUID
                                         graph.scope.launch {
                                             try {
                                                 graph.database.withTransaction {
+                                                    check(graph.dao.lesson(lessonId) != null) { "录音记录已删除" }
                                                     graph.dao.putPhoto(PhotoEntity(UUID.randomUUID().toString(), lessonId, pair.first.name, audioMs, capturedAt, pair.second))
                                                     graph.dao.revise(lessonId)
                                                 }

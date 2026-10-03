@@ -18,6 +18,7 @@ import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -76,12 +77,15 @@ class RecordingService : Service() {
     }
     private suspend fun runRecording(intent: Intent) = coroutineScope {
         val existingId = intent.getStringExtra("lesson_id")
-        val lesson = if (existingId != null) requireNotNull(graph.dao.lesson(existingId)) else LessonEntity(
-            UUID.randomUUID().toString(), intent.getStringExtra("title")?.ifBlank { "课堂录音" } ?: "课堂录音",
-            intent.getStringExtra("course") ?: "", System.currentTimeMillis(), modelId = graph.settings.modelId)
-        lessonId = lesson.id
-        graph.dao.putLesson(lesson.copy(status = if (intent.action == DRAIN) "processing" else "recording", error = ""))
-        graph.recording.value = RecordingState(lesson.id, if (intent.action == DRAIN) "processing" else "recording", lesson.samples)
+        val lesson = graph.lessonOperations.withLock {
+            val value = if (existingId != null) requireNotNull(graph.dao.lesson(existingId)) { "录音记录已删除" } else LessonEntity(
+                UUID.randomUUID().toString(), intent.getStringExtra("title")?.ifBlank { "课堂录音" } ?: "课堂录音",
+                intent.getStringExtra("course") ?: "", System.currentTimeMillis(), modelId = graph.settings.modelId)
+            lessonId = value.id
+            graph.dao.putLesson(value.copy(status = if (intent.action == DRAIN) "processing" else "recording", error = ""))
+            graph.recording.value = RecordingState(value.id, if (intent.action == DRAIN) "processing" else "recording", value.samples)
+            value
+        }
         val clock = SampleClock(initialSamples = lesson.samples)
         val modelReady = File(filesDir, "models/${lesson.modelId}/installed.json").exists()
         AppLog.i("RecordingService", "录音课堂 lesson=${lesson.id} 模型=${lesson.modelId} 模型已安装=$modelReady")

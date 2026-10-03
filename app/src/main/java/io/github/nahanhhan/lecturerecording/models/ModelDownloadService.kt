@@ -4,14 +4,15 @@ import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 import io.github.nahanhhan.lecturerecording.*
 import io.github.nahanhhan.lecturerecording.logging.AppLog
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import okhttp3.*
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
-import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
+import io.github.nahanhhan.lecture.core.ModelArchiveExtractor
 import java.io.File
 import java.io.RandomAccessFile
 import java.security.MessageDigest
@@ -22,6 +23,8 @@ class ModelDownloadService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var active: Job? = null
     private var call: Call? = null
+    private var wake: PowerManager.WakeLock? = null
+    private var wakeRenewal: Job? = null
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (active?.isActive == true) return START_NOT_STICKY
@@ -42,13 +45,32 @@ class ModelDownloadService : Service() {
         }
         return START_NOT_STICKY
     }
-    private fun digest(file: File): String {
+    private fun digest(file: File, checkCancelled: () -> Unit): String {
         val digest = MessageDigest.getInstance("SHA-256")
+        var processed = 0L
+        var lastUpdate = 0L
         file.inputStream().buffered().use { input ->
             val buffer = ByteArray(1024 * 1024)
-            while (true) { val count = input.read(buffer); if (count < 0) break; digest.update(buffer, 0, count) }
+            while (true) {
+                checkCancelled()
+                val count = input.read(buffer); if (count < 0) break
+                digest.update(buffer, 0, count); processed += count
+                val now = SystemClock.elapsedRealtime()
+                if (now - lastUpdate >= 250) { graph.download.value = graph.download.value.copy(bytes = processed); lastUpdate = now }
+            }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+    private fun startProcessingWakeLock() {
+        wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:model-install").apply {
+            setReferenceCounted(false); acquire(10 * 60 * 1000L)
+        }
+        wakeRenewal = scope.launch { while (isActive) { delay(5 * 60 * 1000L); wake?.acquire(10 * 60 * 1000L) } }
+    }
+    private fun releaseProcessingWakeLock() {
+        wakeRenewal?.cancel(); wakeRenewal = null
+        if (wake?.isHeld == true) wake?.release()
+        wake = null
     }
     private suspend fun install(model: ModelSpec, source: DownloadSource) {
         val root = File(filesDir, "models").apply { mkdirs() }
@@ -96,53 +118,56 @@ class ModelDownloadService : Service() {
                 }
             }
         }
-        graph.download.value = DownloadState(model.id, partial.length(), model.bytes, "verifying")
-        AppLog.i("ModelDownloadService", "下载完成 model=${model.id} 字节=${partial.length()}，开始校验")
-        check(partial.length() == model.bytes) { "下载尚未完成，可继续" }
-        if (digest(partial) != model.sha256) {
-            AppLog.e("ModelDownloadService", "模型校验失败 model=${model.id}")
-            partial.delete(); throw IllegalStateException("模型校验失败，请重新下载")
-        }
-        AppLog.i("ModelDownloadService", "校验通过 model=${model.id}，开始解压安装")
-        val staging = File(root, "${model.id}_installing").apply { mkdirs() }
-        // Only whitelisted regular files are copied; archive paths are never used as destinations.
-        TarArchiveInputStream(BZip2CompressorInputStream(partial.inputStream().buffered())).use { archive ->
-            while (true) {
-                currentCoroutineContext().ensureActive()
-                val entry = archive.nextTarEntry ?: break
-                val name = entry.name.substringAfterLast('/')
-                if (!entry.isFile || name !in model.files) continue
-                check(entry.size in 1..1_500_000_000L) { "模型文件大小无效" }
-                val target = File(staging, name)
-                target.outputStream().buffered().use { archive.copyTo(it) }
+        startProcessingWakeLock()
+        try {
+            val processingContext = currentCoroutineContext()
+            graph.download.value = DownloadState(model.id, 0, model.bytes, "verifying")
+            ServiceCompat.startForeground(this, 3, Notifications.build(this, "校验识别模型", "正在检查模型文件").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            AppLog.i("ModelDownloadService", "下载完成 model=${model.id} 字节=${partial.length()}，开始校验")
+            check(partial.length() == model.bytes) { "下载尚未完成，可继续" }
+            if (digest(partial) { processingContext.ensureActive() } != model.sha256) {
+                AppLog.e("ModelDownloadService", "模型校验失败 model=${model.id}")
+                partial.delete(); throw IllegalStateException("模型校验失败，请重新下载")
             }
-        }
-        val hashes = model.files.associateWith { name ->
-            val file = File(staging, name)
-            check(file.exists() && file.length() > 0) { "模型缺少 $name" }
-            digest(file)
-        }
-        val destination = File(root, model.id).apply { mkdirs() }
-        File(destination, "installed.json").delete()
-        model.files.forEach { name ->
-            val target = File(destination, name)
-            if (target.exists()) check(target.delete())
-            check(File(staging, name).renameTo(target)) { "模型安装失败" }
-        }
-        File(destination, "installed.json").writeText(buildJsonObject {
-            put("id", model.id); put("archive_sha256", model.sha256); put("runtime", "1.12.27")
-            put("files", buildJsonObject { hashes.forEach { (name, hash) -> put(name, hash) } })
-        }.toString())
-        staging.delete(); partial.delete(); etagFile.delete()
-        AppLog.i("ModelDownloadService", "解压安装完成 model=${model.id} 文件=${model.files.size}")
+            AppLog.i("ModelDownloadService", "校验通过 model=${model.id}，开始解压安装")
+            val installationStarted = SystemClock.elapsedRealtime()
+            graph.download.value = DownloadState(model.id, 0, model.bytes, "installing")
+            ServiceCompat.startForeground(this, 3, Notifications.build(this, "安装识别模型", "正在解压安装").build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+            val staging = File(root, "${model.id}_installing").apply { mkdirs() }
+            val hashes = NativeBzip2InputStream(partial).use { stream ->
+                var lastProgress = 0L
+                ModelArchiveExtractor.extract(stream, staging, model.files, onProgress = {
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastProgress >= 250) {
+                        graph.download.value = DownloadState(model.id, stream.compressedBytesRead.coerceAtMost(model.bytes), model.bytes, "installing")
+                        lastProgress = now
+                    }
+                }, checkCancelled = { processingContext.ensureActive() })
+            }
+            val destination = File(root, model.id).apply { mkdirs() }
+            File(destination, "installed.json").delete()
+            model.files.forEach { name ->
+                val target = File(destination, name)
+                if (target.exists()) check(target.delete())
+                check(File(staging, name).renameTo(target)) { "模型安装失败" }
+            }
+            File(destination, "installed.json").writeText(buildJsonObject {
+                put("id", model.id); put("archive_sha256", model.sha256); put("runtime", "1.12.27")
+                put("files", buildJsonObject { hashes.forEach { (name, hash) -> put(name, hash) } })
+            }.toString())
+            staging.delete(); partial.delete(); etagFile.delete()
+            AppLog.i("ModelDownloadService", "解压安装完成 model=${model.id} 文件=${model.files.size} 耗时=${SystemClock.elapsedRealtime() - installationStarted}ms")
+        } finally { releaseProcessingWakeLock() }
     }
     override fun onTimeout(startId: Int, fgsType: Int) {
         AppLog.e("ModelDownloadService", "前台服务超时，取消下载")
         call?.cancel(); active?.cancel(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+        releaseProcessingWakeLock()
     }
     override fun onDestroy() {
         AppLog.i("ModelDownloadService", "下载服务销毁")
         call?.cancel(); scope.cancel()
+        releaseProcessingWakeLock()
         AppLog.flush()
         super.onDestroy()
     }

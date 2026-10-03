@@ -17,6 +17,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
@@ -39,8 +40,12 @@ import kotlinx.serialization.decodeFromString
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun DetailScreen(activity: MainActivity, graph: AppGraph, id: String) {
+@Composable fun DetailScreen(activity: MainActivity, graph: AppGraph, id: String, onDeleted: () -> Unit = {}) {
     val lesson by remember(id) { graph.dao.observeLesson(id) }.collectAsStateWithLifecycle(initialValue = null)
+    var loaded by rememberSaveable(id) { mutableStateOf(false) }
+    LaunchedEffect(lesson) {
+        if (lesson != null) loaded = true else if (loaded) onDeleted()
+    }
     val segments by remember(id) { graph.dao.observeSegments(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val photos by remember(id) { graph.dao.observePhotos(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
     val jobs by remember(id) { graph.dao.observeJobs(id) }.collectAsStateWithLifecycle(initialValue = emptyList())
@@ -51,6 +56,7 @@ import java.io.File
     var error by remember { mutableStateOf("") }
     var editSegment by remember { mutableStateOf<SegmentEntity?>(null) }
     var editNote by remember { mutableStateOf(false) }
+    var confirmDelete by remember { mutableStateOf(false) }
     var noteBatches by remember { mutableStateOf<List<NoteBatchEntity>>(emptyList()) }
     val scope = rememberCoroutineScope()
     val player = remember { ExoPlayer.Builder(activity).build() }
@@ -90,7 +96,12 @@ import java.io.File
     val cloudRunning = jobs.any { it.status == "running" }
     Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(current.title, style = MaterialTheme.typography.headlineSmall)
+            Row {
+                Text(current.title, Modifier.weight(1f), style = MaterialTheme.typography.headlineSmall)
+                TextButton(enabled = !active && !cloudRunning && current.status !in setOf("recording", "paused", "processing"), onClick = { confirmDelete = true }) {
+                    Text("删除录音", color = MaterialTheme.colorScheme.error)
+                }
+            }
             Text("${formatTime((if (active) recording.samples else current.samples) * 1000 / 16000)} · ${statusLabel(if (active) recording.status else current.status)}")
             if (current.error.isNotBlank()) Text(current.error, color = MaterialTheme.colorScheme.error)
             if (active && recording.warning.isNotBlank()) Text(recording.warning, style = MaterialTheme.typography.bodySmall)
@@ -200,6 +211,8 @@ import java.io.File
             }
         }
     }
+    if (confirmDelete) DeleteRecordingsDialog(graph, listOf(id), onDismiss = { confirmDelete = false },
+        beforeDelete = { player.stop(); playing = false }, onDeleted = { confirmDelete = false; onDeleted() })
     editSegment?.let { segment ->
         var text by remember(segment.id) { mutableStateOf(segment.text) }
         AlertDialog(onDismissRequest = { editSegment = null }, title = { Text("编辑转写") }, text = {

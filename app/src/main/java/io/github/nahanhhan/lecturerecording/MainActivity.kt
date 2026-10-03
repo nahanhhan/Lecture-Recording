@@ -11,7 +11,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -69,25 +70,51 @@ class MainActivity : ComponentActivity() {
         background = Color(0xFFF8F7F2), surface = Color(0xFFF8F7F2), surfaceContainer = Color(0xFFEEEEE6)), content = content)
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable private fun LectureRoot(activity: MainActivity, graph: AppGraph) {
     var page by rememberSaveable { mutableStateOf("home") }
     var selectedId by rememberSaveable { mutableStateOf<String?>(null) }
     var newRecording by remember { mutableStateOf(false) }
+    var selecting by rememberSaveable { mutableStateOf(false) }
+    var selectedRecords by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var confirmBulkDelete by remember { mutableStateOf(false) }
     val recording by graph.recording.collectAsStateWithLifecycle()
+    val cloudLessonId by graph.cloudLessonId.collectAsStateWithLifecycle()
+    val busyRecords by graph.dao.observeBusyLessonIds().collectAsStateWithLifecycle(initialValue = emptyList())
     val lessons by graph.dao.observeLessons().collectAsStateWithLifecycle(initialValue = emptyList())
-    BackHandler(page != "home") { page = "home" }
+    val unavailable = busyRecords.toSet() + listOfNotNull(recording.lessonId, cloudLessonId)
+    val selectable = lessons.filter { it.id !in unavailable }.map { it.id }
+    LaunchedEffect(selectable) {
+        selectedRecords = selectedRecords.filter { it in selectable }
+        if (selectedRecords.isEmpty()) confirmBulkDelete = false
+    }
+    BackHandler(page != "home" || selecting) {
+        if (selecting) { selecting = false; selectedRecords = emptyList() } else page = "home"
+    }
     Scaffold(topBar = {
-        TopAppBar(title = { Text(if (page == "settings") "设置" else if (page == "detail") "课堂记录" else "RecNote") },
-            navigationIcon = { if (page != "home") IconButton(onClick = { page = "home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
-            actions = { if (page != "settings") IconButton(onClick = { page = "settings" }) { Icon(Icons.Default.Settings, "设置") } })
+        TopAppBar(title = { Text(if (selecting && page == "home") "已选择 ${selectedRecords.size} 条" else if (page == "settings") "设置" else if (page == "detail") "课堂记录" else "RecNote") },
+            navigationIcon = {
+                if (selecting && page == "home") IconButton(onClick = { selecting = false; selectedRecords = emptyList() }) { Icon(Icons.Default.Close, "退出多选") }
+                else if (page != "home") IconButton(onClick = { page = "home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
+            },
+            actions = {
+                if (selecting && page == "home") {
+                    TextButton(enabled = selectable.isNotEmpty(), onClick = {
+                        selectedRecords = if (selectedRecords.size == selectable.size) emptyList() else selectable
+                    }) { Text(if (selectable.isNotEmpty() && selectedRecords.size == selectable.size) "取消全选" else "全选") }
+                    IconButton(enabled = selectedRecords.isNotEmpty(), onClick = { confirmBulkDelete = true }) { Icon(Icons.Default.Delete, "删除所选") }
+                } else {
+                    if (page == "home" && lessons.isNotEmpty()) TextButton(onClick = { selecting = true }) { Text("多选") }
+                    if (page != "settings") IconButton(onClick = { page = "settings" }) { Icon(Icons.Default.Settings, "设置") }
+                }
+            })
     }) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             when (page) {
                 "settings" -> SettingsScreen(activity, graph)
-                "detail" -> selectedId?.let { DetailScreen(activity, graph, it) }
+                "detail" -> selectedId?.let { DetailScreen(activity, graph, it) { selectedId = null; page = "home" } }
                 else -> LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    item {
+                    if (!selecting) item {
                         Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE3ECE5)), shape = RoundedCornerShape(24.dp)) {
                             Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                                 Text("把课堂留在身边", style = MaterialTheme.typography.headlineSmall)
@@ -99,7 +126,7 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
-                    item { Text("我的课堂 · ${lessons.size}", style = MaterialTheme.typography.titleMedium) }
+                    item { Text(if (selecting) "选择要删除的录音，处理中的记录暂不能删除" else "我的课堂 · ${lessons.size}", style = MaterialTheme.typography.titleMedium) }
                     if (lessons.isEmpty()) item {
                         Column(Modifier.fillMaxWidth().padding(vertical = 40.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                             Text("还没有课堂记录", style = MaterialTheme.typography.titleLarge)
@@ -107,9 +134,21 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                     items(lessons, key = { it.id }) { lesson ->
-                        Card(Modifier.fillMaxWidth().clickable { selectedId = lesson.id; page = "detail" }) {
+                        val selected = lesson.id in selectedRecords
+                        fun toggle() {
+                            if (lesson.id in selectable) selectedRecords = if (selected) selectedRecords - lesson.id else selectedRecords + lesson.id
+                        }
+                        Card(Modifier.fillMaxWidth().combinedClickable(
+                            onClick = { if (selecting) toggle() else { selectedId = lesson.id; page = "detail" } },
+                            onLongClick = {
+                                if (lesson.id in selectable) { selecting = true; toggle() }
+                                else Toast.makeText(activity, "请等待录音、转写或整理结束后再删除", Toast.LENGTH_SHORT).show()
+                            }), colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer)) {
                             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text(lesson.title, style = MaterialTheme.typography.titleLarge)
+                                Row {
+                                    Text(lesson.title, Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+                                    if (selecting) Checkbox(checked = selected, enabled = lesson.id in selectable, onCheckedChange = { toggle() })
+                                }
                                 Text(listOf(lesson.course, SimpleDateFormat("MM月dd日 HH:mm", Locale.CHINA).format(lesson.createdAt)).filter { it.isNotBlank() }.joinToString(" · "))
                                 Text("${formatTime(lesson.samples * 1000 / 16000)} · ${statusLabel(lesson.status)}", color = MaterialTheme.colorScheme.primary)
                             }
@@ -119,6 +158,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    if (confirmBulkDelete && selectedRecords.isNotEmpty()) DeleteRecordingsDialog(graph, selectedRecords,
+        onDismiss = { confirmBulkDelete = false }, onDeleted = {
+            confirmBulkDelete = false; selecting = false; selectedRecords = emptyList()
+        })
     if (newRecording) {
         var title by remember { mutableStateOf("课堂录音") }
         var course by remember { mutableStateOf("") }

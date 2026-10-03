@@ -3,6 +3,7 @@
 .build-cache/
 .tools/
 **/build/
+**/.cxx/
 local.properties
 *.jks
 keystore.properties

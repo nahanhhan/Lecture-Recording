@@ -4,14 +4,15 @@
 
 一款安卓课堂/会议录音工具：录音和拍照 → 手机本地转写 → 手动云端整理 → 图文笔记 → PDF / Markdown。
 
-当前版本为 **0.1.2-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
+当前版本为 **0.1.3-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
 
 ## 已实现
 
 - 课堂列表、麦克风录音、暂停/继续、持续通知控制、异常后已保存音频恢复。
 - 16 kHz 单声道 WAV 按 30 秒分文件写入，每秒更新文件头并同步落盘。
 - 独立 `:asr` 进程中的 sherpa-onnx 1.12.27，默认 FireRedASR2 AED INT8，备用 CTC；最多 15 秒短段识别，临时结果合并以控制积压。
-- App 内模型下载、HTTP Range 续传、固定 SHA-256 校验、安装状态及文件校验清单。
+- App 内模型下载、HTTP Range 续传、固定 SHA-256 校验、原生解压、校验/安装进度及文件校验清单；文件哈希随解压写入计算，减少重复读盘。
+- 详情页删除录音；列表长按或点击「多选」后全选、批量删除。录音、照片、原稿、笔记及本地导出缓存一并清理，处理中记录暂不允许删除。
 - CameraX 拍照，按音频样本计时，保留原图、拍摄日期、课堂内序号和固定 `ast_` 文件名。
 - 段落/照片回听、原稿编辑、照片选择、云端来源版本快照。
 - HTTPS Chat Completions 工具调用、严格结构与来源校验、数据库事务、批次幂等保存、工具回执和手动恢复。
@@ -23,7 +24,7 @@
 
 ## 构建
 
-需要 JDK 17 或 21、Android SDK platform 36、Build Tools 36.0.0 和 Python 3.10+。
+需要 JDK 17 或 21、Android SDK platform 36、Build Tools 36.0.0、NDK 27.2.12479018、CMake 3.22.1 和 Python 3.10+。
 
 ```sh
 python scripts/bootstrap.py --native
@@ -81,4 +82,5 @@ keyPassword=YOUR_LOCAL_PASSWORD
 - [sherpa-onnx 1.12.27](https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.12.27)，Apache-2.0，许可证保存在 `third_party/`。
 - [FireRedASR 模型说明](https://k2-fsa.github.io/sherpa/onnx/FireRedAsr/pretrained.html)，模型在用户设备按需下载。
 - [KaTeX 0.16.22](https://github.com/KaTeX/KaTeX/releases/tag/v0.16.22)，MIT，许可证保存在 `third_party/`。
+- [libbzip2 1.0.8](https://sourceware.org/bzip2/)，官方源码随工程保存，用于原生模型解压；源码包 SHA-256 和许可证保存在工程中。
 - [OpenAI Function Calling](https://developers.openai.com/api/docs/guides/function-calling)，本应用实现现有方案指定的 Chat Completions 适配器；所选服务和模型必须支持该端点。

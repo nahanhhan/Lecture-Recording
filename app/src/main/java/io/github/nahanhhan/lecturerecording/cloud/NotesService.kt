@@ -14,6 +14,7 @@ import io.github.nahanhhan.lecturerecording.data.*
 import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
@@ -35,9 +36,15 @@ class NotesService : Service() {
                 graph.initialized.await()
                 val settings = graph.settings.cloud()
                 check(graph.settings.cloudTested) { "请先在设置中测试云端接口" }
-                val job = intent?.getStringExtra("job_id")?.let { requireNotNull(graph.dao.job(it)) }
-                    ?: createJob(requireNotNull(intent?.getStringExtra("lesson_id")))
-                currentJobId = job.id
+                val job = graph.lessonOperations.withLock {
+                    val value = intent?.getStringExtra("job_id")?.let { requireNotNull(graph.dao.job(it)) { "整理任务已删除" } }
+                        ?: createJob(requireNotNull(intent?.getStringExtra("lesson_id")))
+                    check(graph.dao.lesson(value.lessonId) != null) { "录音记录已删除" }
+                    currentJobId = value.id
+                    graph.cloudLessonId.value = value.lessonId
+                    graph.dao.jobStatus(value.id, "running")
+                    value
+                }
                 AppLog.i("NotesService", "整理任务开始 job=${job.id} lesson=${job.lessonId}")
                 runJob(job, settings)
             } catch (error: Exception) {
@@ -45,7 +52,10 @@ class NotesService : Service() {
                 withContext(NonCancellable) {
                     currentJobId?.let { graph.dao.jobStatus(it, "waiting", if (error is CancellationException) "任务已暂停，可手动继续" else error.message ?: "整理失败，可手动重试") }
                 }
-            } finally { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+            } finally {
+                withContext(NonCancellable) { graph.lessonOperations.withLock { graph.cloudLessonId.value = null } }
+                stopForeground(STOP_FOREGROUND_REMOVE); stopSelf()
+            }
         }
         return START_NOT_STICKY
     }

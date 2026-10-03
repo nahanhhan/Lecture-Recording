@@ -1,4 +1,6 @@
 * text=auto
+app/src/main/cpp/bzip2/* -whitespace
+third_party/bzip2-LICENSE -whitespace
 gradlew text eol=lf
 *.bat text eol=crlf
 *.sh text eol=lf

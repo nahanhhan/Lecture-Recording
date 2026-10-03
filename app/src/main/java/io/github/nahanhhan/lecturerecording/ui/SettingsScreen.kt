@@ -56,7 +56,7 @@ import java.time.format.DateTimeFormatter
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Text("本地识别模型", style = MaterialTheme.typography.titleLarge)
         Text("模型下载完成后在手机本地转写。默认模型下载约 800 MB，安装后约 1.2 GB，请预留至少 3 GB 空间。若下载失败，请尝试切换下载源。", style = MaterialTheme.typography.bodyMedium)
-        val switchEnabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying")
+        val switchEnabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying", "installing")
         SingleChoiceSegmentedButtonRow(Modifier.alpha(if (switchEnabled) 1f else 0.38f)) {
             SegmentedButton(
                 selected = source == DownloadSource.MODELSCOPE,
@@ -85,12 +85,19 @@ import java.time.format.DateTimeFormatter
                         })
                         Column { Text(spec.label); Text(if (installed) "已安装" else "尚未安装", style = MaterialTheme.typography.bodySmall) }
                     }
-                    if (!installed) OutlinedButton(enabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying"), onClick = {
+                    if (!installed) OutlinedButton(enabled = recording.lessonId == null && download.status !in setOf("downloading", "verifying", "installing"), onClick = {
                         ContextCompat.startForegroundService(activity, Intent(activity, ModelDownloadService::class.java).putExtra("model", spec.id))
                     }) { Text("下载 / 继续下载") }
                     if (download.modelId == spec.id && download.status != "idle") {
-                        Text(when (download.status) { "verifying" -> "正在校验并安装"; "installed" -> "安装完成"; "error" -> download.error; else -> "${download.bytes / 1024 / 1024} / ${download.total / 1024 / 1024} MB" })
-                        if (download.total > 0 && download.status == "downloading") LinearProgressIndicator(
+                        val percent = if (download.total > 0) ((download.bytes * 100 / download.total).coerceIn(0, 100)) else 0
+                        Text(when (download.status) {
+                            "verifying" -> "正在校验模型 · $percent%"
+                            "installing" -> "正在安装模型 · $percent%"
+                            "installed" -> "安装完成"
+                            "error" -> download.error
+                            else -> "${download.bytes / 1024 / 1024} / ${download.total / 1024 / 1024} MB"
+                        })
+                        if (download.total > 0 && download.status in setOf("downloading", "verifying", "installing")) LinearProgressIndicator(
                             progress = { (download.bytes.toFloat() / download.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
                     }
                 }

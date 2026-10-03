@@ -5,6 +5,7 @@ import androidx.room.Room
 import io.github.nahanhhan.lecturerecording.data.*
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.sync.Mutex
 import java.io.File
 import io.github.nahanhhan.lecturerecording.logging.AppLog
 import io.github.nahanhhan.lecturerecording.recording.WavFile
@@ -20,9 +21,13 @@ class AppGraph(val app: Application) {
     val dao = database.dao()
     val settings = SettingsStore(app)
     val recording = MutableStateFlow(RecordingState())
+    val cloudLessonId = MutableStateFlow<String?>(null)
+    val lessonOperations = Mutex()
+    val recordings = RecordingRepository(this)
     val download = MutableStateFlow(DownloadState())
     fun lessonDir(id: String) = File(app.filesDir, "lessons/$id").apply { mkdirs() }
     val initialized = scope.async {
+        recordings.recoverDeletions()
         dao.interruptOldRecordings(); dao.interruptOldJobs()
         dao.allChunks().forEach { chunk ->
             val file = File(chunk.path)

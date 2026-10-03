@@ -38,6 +38,10 @@ interface LectureDao {
     @Query("SELECT * FROM lessons ORDER BY createdAt DESC") fun observeLessons(): Flow<List<LessonEntity>>
     @Query("SELECT * FROM lessons WHERE id=:id") fun observeLesson(id: String): Flow<LessonEntity?>
     @Query("SELECT * FROM lessons WHERE id=:id") suspend fun lesson(id: String): LessonEntity?
+    @Query("SELECT * FROM lessons WHERE id IN (:ids)") suspend fun lessons(ids: List<String>): List<LessonEntity>
+    @Query("SELECT id FROM lessons WHERE status IN ('recording','paused','processing') UNION SELECT lessonId FROM jobs WHERE status='running'")
+    fun observeBusyLessonIds(): Flow<List<String>>
+    @Query("SELECT COUNT(*) FROM jobs WHERE lessonId IN (:ids) AND status='running'") suspend fun runningJobs(ids: List<String>): Int
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun putLesson(lesson: LessonEntity)
     @Query("UPDATE lessons SET samples=:samples WHERE id=:id") suspend fun setSamples(id: String, samples: Long)
     @Query("UPDATE lessons SET status=:status,error=:error WHERE id=:id") suspend fun setStatus(id: String, status: String, error: String = "")
@@ -74,6 +78,13 @@ interface LectureDao {
     @Query("SELECT * FROM edited_notes WHERE lessonId=:lessonId") fun observeEditedNote(lessonId: String): Flow<EditedNoteEntity?>
     @Query("SELECT * FROM edited_notes WHERE lessonId=:lessonId") suspend fun editedNote(lessonId: String): EditedNoteEntity?
     @Query("DELETE FROM edited_notes WHERE lessonId=:lessonId") suspend fun clearEditedNote(lessonId: String)
+    @Query("DELETE FROM note_batches WHERE jobId IN (SELECT id FROM jobs WHERE lessonId IN (:ids))") suspend fun deleteBatches(ids: List<String>)
+    @Query("DELETE FROM jobs WHERE lessonId IN (:ids)") suspend fun deleteJobs(ids: List<String>)
+    @Query("DELETE FROM chunks WHERE lessonId IN (:ids)") suspend fun deleteChunks(ids: List<String>)
+    @Query("DELETE FROM segments WHERE lessonId IN (:ids)") suspend fun deleteSegments(ids: List<String>)
+    @Query("DELETE FROM photos WHERE lessonId IN (:ids)") suspend fun deletePhotos(ids: List<String>)
+    @Query("DELETE FROM edited_notes WHERE lessonId IN (:ids)") suspend fun deleteEditedNotes(ids: List<String>)
+    @Query("DELETE FROM lessons WHERE id IN (:ids)") suspend fun deleteLessons(ids: List<String>)
 }
 
 @Database(entities = [LessonEntity::class, ChunkEntity::class, SegmentEntity::class, PhotoEntity::class,
