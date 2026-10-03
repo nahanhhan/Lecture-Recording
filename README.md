@@ -1,4 +1,4 @@
-# RecNote：从录音到笔记，All in One。
+# RecNote：从录音到笔记的一站式体验
 
 <img src="artwork/app-icon-preview.png" alt="RecNote图标" width="96">
 
