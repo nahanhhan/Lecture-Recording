@@ -230,7 +230,7 @@ class RecordingService : Service() {
     private fun foreground(text: String) {
         fun action(action: String, code: Int): PendingIntent = PendingIntent.getService(this, code,
             Intent(this, RecordingService::class.java).setAction(action), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = Notifications.build(this, "录课", text, true)
+        val notification = Notifications.build(this, "RecNote", text, true)
             .addAction(0, if (paused.get()) "继续" else "暂停", action(if (paused.get()) RESUME else PAUSE, 1))
             .addAction(0, "停止", action(STOP, 2)).build()
         ServiceCompat.startForeground(this, 1, notification, if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)

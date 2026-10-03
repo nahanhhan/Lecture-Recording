@@ -1,6 +1,6 @@
-# 录课 RecNote
+# RecNote：从录音到笔记，All in One。
 
-<img src="artwork/app-icon-preview.png" alt="录课图标" width="96">
+<img src="artwork/app-icon-preview.png" alt="RecNote图标" width="96">
 
 一款安卓课堂/会议录音工具：录音和拍照 → 手机本地转写 → 手动云端整理 → 图文笔记 → PDF / Markdown。
 

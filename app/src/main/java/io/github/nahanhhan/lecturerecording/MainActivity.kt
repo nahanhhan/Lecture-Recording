@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     val lessons by graph.dao.observeLessons().collectAsStateWithLifecycle(initialValue = emptyList())
     BackHandler(page != "home") { page = "home" }
     Scaffold(topBar = {
-        TopAppBar(title = { Text(if (page == "settings") "设置" else if (page == "detail") "课堂记录" else "录课") },
+        TopAppBar(title = { Text(if (page == "settings") "设置" else if (page == "detail") "课堂记录" else "RecNote") },
             navigationIcon = { if (page != "home") IconButton(onClick = { page = "home" }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") } },
             actions = { if (page != "settings") IconButton(onClick = { page = "settings" }) { Icon(Icons.Default.Settings, "设置") } })
     }) { padding ->
