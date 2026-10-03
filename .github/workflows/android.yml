@@ -36,7 +36,7 @@ jobs:
       - name: Verify and build
         run: |
           chmod +x gradlew
-          ./gradlew :core:test :app:lintDebug :app:assembleDebug --console=plain
+          ./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug --console=plain
       - uses: actions/upload-artifact@v4
         with:
           name: lecture-recording-debug
@@ -47,4 +47,5 @@ jobs:
           name: verification-reports
           path: |
             core/build/reports/tests/
+            app/build/reports/tests/
             app/build/reports/lint-results-debug.html

@@ -4,7 +4,7 @@
 
 一款安卓课堂/会议录音工具：录音和拍照 → 手机本地转写 → 手动云端整理 → 图文笔记 → PDF / Markdown。
 
-当前版本为 **0.1.3-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
+当前版本为 **0.1.4-alpha**。首版代码已经实现；长时间后台稳定性、识别效果和真实云端往返仍需在目标手机上验收，不能将编译通过视为发布验收通过。
 
 ## 已实现
 
@@ -16,7 +16,9 @@
 - CameraX 拍照，按音频样本计时，保留原图、拍摄日期、课堂内序号和固定 `ast_` 文件名。
 - 段落/照片回听、原稿编辑、照片选择、云端来源版本快照。
 - HTTPS Chat Completions 工具调用、严格结构与来源校验、数据库事务、批次幂等保存、工具回执和手动恢复。
-- Android Keystore 加密保存 API Key；接口测试使用人工生成的数字图片，不发送课堂材料。
+- DeepSeek、OpenRouter、OpenCode Zen、OpenAI 和自定义供应商入口，各自加密保存密钥及配置；可读取供应商模型列表或手动填写。
+- 基础地址及完整 `/chat/completions` 地址自动规范化；连接、文字笔记保存、读图分步测试，失败时显示供应商原因和 HTTP 状态，不发送课堂材料。
+- 可关闭「同时整理照片」以只整理文字，照片仍在本机及导出笔记末尾保留。DeepSeek 自动使用兼容参数并关闭思考模式，应用仍严格校验结构和来源。
 - 离线 Markdown、表格、代码和 KaTeX 公式阅读；Android 保存为 PDF；Markdown 与原图 ZIP 分享。
 - 设置页最下方「日志」区块：级别三档 `None` / `Info` / `Debug`（默认 `None` 不记录；`Info` 记录关键事件并自动脱敏凭据；`Debug` 记录全部细节，会记录敏感信息，抓问题后请切回），显示当前日志占用，「清理日志」一键删除全部日志，「导出日志」把主进程与识别进程日志归并为单个 `.log` 经系统分享发出（可能含敏感信息，仅发给开发者排查问题）。
 
@@ -28,7 +30,7 @@
 
 ```sh
 python scripts/bootstrap.py --native
-./gradlew :core:test :app:lintDebug :app:assembleDebug
+./gradlew :core:test :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
 ```
 
 Windows 使用 `gradlew.bat`。设置 `ANDROID_HOME`，或在未提交的 `local.properties` 中填写 `sdk.dir`。首次准备和构建需要访问 GitHub、Google Maven 和 Maven Central。
@@ -59,10 +61,24 @@ keyPassword=YOUR_LOCAL_PASSWORD
 1. 安装 arm64 APK，在设置中下载默认识别模型并确认安装完成。
 2. 检查手机后台/电池设置，开始课堂录音，按需暂停、继续和拍照。
 3. 结束后等待剩余实时段落完成。模型未准备好时音频仍保存，之后只处理未完成短段。
-4. 配置支持读图和工具调用的云端服务，填写 HTTPS 基础地址、模型名称和 Key，再测试接口。
+4. 在设置中选择云端供应商，填写模型名称和它提供的 API Key，再测试连接。只整理文字时关闭「同时整理照片」；读图还需所选模型支持图片。
 5. 核对原稿和照片，手动整理笔记，完成后编辑、回听和导出。
 
 普通锁屏与切换页面由前台服务维持；系统强制停止、关机或权限撤销属于中断。再次打开会修复已写入 WAV 文件头、保留未完成任务，并由用户继续操作。
+
+## 云端供应商
+
+| 入口 | 默认基础地址 | 使用说明 |
+| --- | --- | --- |
+| DeepSeek | `https://api.deepseek.com` | `/v1` 地址也可手动填写；使用非思考模式的工具调用，不发送 `strict` 或 `parallel_tool_calls`。模型能力以实际测试为准。 |
+| OpenRouter | `https://openrouter.ai/api/v1` | 模型名一般为 `供应商/模型`；模型列表提供能力信息时显示读图和工具调用提示。 |
+| OpenCode Zen | `https://opencode.ai/zen/v1` | 使用 Zen API Key；模型名不加 `opencode/`。仅接入其 Chat Completions 模型；Responses、Anthropic、Gemini 专用端点暂不支持。 |
+| OpenAI | `https://api.openai.com/v1` | 选择支持 Chat Completions 工具调用的模型。仅支持 Responses 的模型暂不支持。 |
+| 自定义 | 手动填写 | 支持 HTTPS Chat Completions，保留网关路径；不自动猜测或添加 `/v1`。 |
+
+供应商切换不会把上一家的密钥带到另一家。修改地址、模型、密钥、照片或严格模式后，需要重新测试；旧版配置会迁移并要求重新测试。恢复旧图文任务时必须启用已测试的读图配置，避免在文字模式下继续上传照片。
+
+官方接口说明：[DeepSeek](https://api-docs.deepseek.com/)、[DeepSeek 工具调用](https://api-docs.deepseek.com/guides/tool_calls/)、[OpenRouter](https://openrouter.ai/docs/quickstart)、[OpenCode Zen](https://opencode.ai/docs/zen/)。
 
 ## 工程结构
 
@@ -74,6 +90,7 @@ keyPassword=YOUR_LOCAL_PASSWORD
 | `docs/ARCHITECTURE.md` | 数据与任务实现细节 |
 | `verification/` | 已验证结果和真机验收清单 |
 | `scripts/` | 固定依赖准备脚本 |
+| `app/src/main/cpp/` | 官方 libbzip2 C 源码及小型 C++ 桥接，用于模型解压 |
 
 完整产品约定见 [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
 

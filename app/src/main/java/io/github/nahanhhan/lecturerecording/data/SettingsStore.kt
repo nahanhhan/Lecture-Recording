@@ -5,13 +5,19 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import io.github.nahanhhan.lecturerecording.models.DownloadSource
+import io.github.nahanhhan.lecture.core.CloudEndpoint
+import io.github.nahanhhan.lecture.core.CloudProvider
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-data class CloudSettings(val baseUrl: String, val model: String, val key: String, val strict: Boolean)
+data class CloudSettings(val baseUrl: String, val model: String, val key: String, val strict: Boolean,
+    val provider: CloudProvider = CloudProvider.CUSTOM, val includePhotos: Boolean = true) {
+    fun normalized() = copy(baseUrl = CloudEndpoint.normalize(baseUrl), model = model.trim(), key = key.trim(),
+        strict = strict && CloudProvider.detect(baseUrl) != CloudProvider.DEEPSEEK)
+}
 
 class SettingsStore(context: Context) {
     private val preferences = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
@@ -34,25 +40,43 @@ class SettingsStore(context: Context) {
                     .setBlockModes(KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE).build())
             }.generateKey()
     }
-    fun cloud(): CloudSettings {
+    fun cloud(provider: CloudProvider? = null): CloudSettings {
+        val legacyBase = preferences.getString("base_url", CloudProvider.OPENAI.baseUrl)!!
+        val legacyProvider = CloudProvider.detect(legacyBase)
+        val selected = provider ?: CloudProvider.fromId(preferences.getString("cloud_provider", null)) ?: legacyProvider
+        val prefix = "cloud_${selected.id}_"
+        val legacy = !preferences.contains(prefix + "base_url") && selected == legacyProvider
         val key = runCatching {
-            val encoded = preferences.getString("key_cipher", null) ?: return@runCatching ""
+            val encoded = preferences.getString(if (legacy) "key_cipher" else prefix + "key_cipher", null) ?: return@runCatching ""
             val bytes = Base64.decode(encoded, Base64.NO_WRAP)
             Cipher.getInstance("AES/GCM/NoPadding").apply {
                 init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, bytes.copyOfRange(0, 12)))
             }.doFinal(bytes.copyOfRange(12, bytes.size)).toString(Charsets.UTF_8)
         }.getOrDefault("")
-        return CloudSettings(preferences.getString("base_url", "https://api.openai.com/v1")!!,
-            preferences.getString("cloud_model", "")!!, key, preferences.getBoolean("strict", true))
+        return CloudSettings(
+            preferences.getString(if (legacy) "base_url" else prefix + "base_url", selected.baseUrl)!!,
+            preferences.getString(if (legacy) "cloud_model" else prefix + "model", "")!!, key,
+            if (selected == CloudProvider.DEEPSEEK) false else preferences.getBoolean(if (legacy) "strict" else prefix + "strict", selected.defaultStrict),
+            selected, preferences.getBoolean(prefix + "photos", if (legacy) true else selected.defaultPhotos))
     }
-    fun saveCloud(settings: CloudSettings) {
+    fun saveCloud(settings: CloudSettings, resetTest: Boolean = false) {
+        val value = settings.normalized()
+        val prefix = "cloud_${value.provider.id}_"
+        val unchanged = value == runCatching { cloud(value.provider).normalized() }.getOrNull()
         val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, secretKey()) }
-        val encrypted = cipher.iv + cipher.doFinal(settings.key.toByteArray())
-        preferences.edit().putString("base_url", settings.baseUrl.trim().trimEnd('/'))
-            .putString("cloud_model", settings.model.trim()).putBoolean("strict", settings.strict)
-            .putString("key_cipher", Base64.encodeToString(encrypted, Base64.NO_WRAP)).putBoolean("cloud_tested", false).apply()
+        val encrypted = cipher.iv + cipher.doFinal(value.key.toByteArray())
+        preferences.edit().putString("cloud_provider", value.provider.id).putString(prefix + "base_url", value.baseUrl)
+            .putString(prefix + "model", value.model).putBoolean(prefix + "strict", value.strict)
+            .putBoolean(prefix + "photos", value.includePhotos)
+            .putString(prefix + "key_cipher", Base64.encodeToString(encrypted, Base64.NO_WRAP))
+            .putBoolean(prefix + "tested", !resetTest && unchanged && preferences.getBoolean(prefix + "tested", false)).apply()
     }
-    var cloudTested: Boolean
-        get() = preferences.getBoolean("cloud_tested", false)
-        set(value) { preferences.edit().putBoolean("cloud_tested", value).apply() }
+    val cloudTested: Boolean
+        get() = preferences.getBoolean("cloud_${cloud().provider.id}_tested", false)
+
+    fun markCloudTested(settings: CloudSettings) {
+        val value = settings.normalized()
+        check(cloud() == value) { "配置已变化，请重新测试当前配置" }
+        preferences.edit().putBoolean("cloud_${value.provider.id}_tested", true).apply()
+    }
 }

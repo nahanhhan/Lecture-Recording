@@ -2,66 +2,97 @@ package io.github.nahanhhan.lecturerecording.cloud
 
 import io.github.nahanhhan.lecturerecording.data.CloudSettings
 import io.github.nahanhhan.lecturerecording.logging.AppLog
-import io.github.nahanhhan.lecture.core.protocolJson
+import io.github.nahanhhan.lecture.core.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.json.*
 import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-class CloudClient(private val settings: CloudSettings) {
-    private val client = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(180, TimeUnit.SECONDS).callTimeout(240, TimeUnit.SECONDS)
-        .followRedirects(false).followSslRedirects(false).build()
+class CloudClient(private val settings: CloudSettings, private val client: OkHttpClient = defaultClient()) {
     suspend fun complete(body: JsonObject): JsonObject {
-        val base = settings.baseUrl.trimEnd('/')
-        val uri = java.net.URI(base)
-        require(uri.scheme == "https" && !uri.host.isNullOrBlank() && uri.userInfo == null && uri.query == null && uri.fragment == null) { "接口基础地址必须是 HTTPS 地址" }
-        require(settings.key.isNotBlank() && settings.model.isNotBlank()) { "请先配置模型名称和 API Key" }
-        val request = Request.Builder().url("$base/chat/completions")
-            .header("Authorization", "Bearer ${settings.key}")
-            .post(body.toString().toRequestBody("application/json".toMediaType())).build()
-        AppLog.i("CloudClient", "发起模型调用 模型=${settings.model} 地址=$base/chat/completions")
-        AppLog.d("CloudClient") { "请求正文=$body" }
+        require(settings.model.isNotBlank()) { "请填写模型名称" }
+        val adapted = CloudRequests.adapt(body, settings.baseUrl, settings.strict)
+        AppLog.d("CloudClient") { "请求正文=$adapted" }
+        return execute(request(CloudEndpoint.completions(settings.baseUrl))
+            .post(adapted.toString().toRequestBody("application/json".toMediaType())).build())
+    }
+
+    suspend fun models(): List<CloudModel> = CloudModelCatalog.parse(
+        execute(request(CloudEndpoint.models(settings.baseUrl)).get().build()))
+
+    private fun request(address: String): Request.Builder {
+        require(settings.key.isNotBlank()) { "请填写当前供应商的 API Key" }
+        return Request.Builder().url(address).header("Authorization", "Bearer ${settings.key.trim()}")
+            .header("Accept", "application/json")
+    }
+
+    private suspend fun execute(request: Request): JsonObject {
+        AppLog.i("CloudClient", "接口请求 ${request.method} ${request.url} 模型=${settings.model}")
         return suspendCancellableCoroutine { continuation ->
             val call = client.newCall(request)
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
-                override fun onFailure(call: Call, error: java.io.IOException) {
-                    AppLog.e("CloudClient", "网络请求失败", error)
-                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException("网络请求失败，请检查连接后重试"))
+                override fun onFailure(call: Call, error: IOException) {
+                    val message = when (error) {
+                        is UnknownHostException -> "无法找到接口域名，请检查地址和网络连接"
+                        is SocketTimeoutException -> "接口响应超时，请稍后重试或更换模型"
+                        is SSLException -> "无法建立安全连接，请检查接口地址和设备网络"
+                        else -> "网络请求失败，请检查设备是否能够访问该供应商"
+                    }
+                    AppLog.e("CloudClient", message, error)
+                    if (continuation.isActive) continuation.resumeWithException(IllegalStateException(message))
                 }
                 override fun onResponse(call: Call, response: Response) {
                     try {
                         response.use {
                             AppLog.i("CloudClient", "接口响应 HTTP=${it.code}")
-                            check(it.isSuccessful) { when (it.code) {
-                                401, 403 -> "接口鉴权失败，请检查 API Key"
-                                429 -> "接口限流，请稍后重试"
-                                else -> "接口请求失败（HTTP ${it.code}），请检查服务兼容性"
-                            } }
-                            val stream = requireNotNull(it.body).byteStream()
-                            val output = java.io.ByteArrayOutputStream()
+                            val stream = requireNotNull(it.body) { "接口没有返回内容" }.byteStream()
+                            val output = ByteArrayOutputStream()
                             val buffer = ByteArray(8192)
+                            val limit = if (it.isSuccessful) 2_000_000 else 8192
                             while (true) {
                                 val count = stream.read(buffer); if (count < 0) break
-                                check(output.size() + count <= 2_000_000) { "接口响应过长" }
-                                output.write(buffer, 0, count)
+                                if (!it.isSuccessful) {
+                                    output.write(buffer, 0, minOf(count, limit - output.size()))
+                                    if (output.size() == limit) break
+                                } else {
+                                    check(output.size() + count <= limit) { "接口响应过长" }
+                                    output.write(buffer, 0, count)
+                                }
                             }
-                            val bytes = output.toByteArray()
-                            val json = protocolJson.parseToJsonElement(bytes.toString(Charsets.UTF_8)).jsonObject
+                            val body = output.toString(Charsets.UTF_8.name())
+                            check(it.isSuccessful) { CloudErrors.message(it.code, body, settings.key.trim()) }
+                            val json = runCatching { protocolJson.parseToJsonElement(body).jsonObject }.getOrElse {
+                                error("接口没有返回有效 JSON，可能填写了网站地址，请检查 API 基础地址")
+                            }
+                            if (json["error"] != null && json["error"] != JsonNull) {
+                                val code = (json["error"] as? JsonObject)?.get("code")?.jsonPrimitive?.intOrNull ?: 400
+                                error(CloudErrors.message(code, body, settings.key.trim()))
+                            }
                             AppLog.d("CloudClient") { "响应正文=$json" }
                             if (continuation.isActive) continuation.resume(json)
                         }
                     } catch (error: Exception) {
-                        AppLog.e("CloudClient", "模型调用失败", error)
+                        AppLog.e("CloudClient", "接口调用失败", error)
                         if (continuation.isActive) continuation.resumeWithException(error)
                     }
                 }
             })
         }
+    }
+
+    companion object {
+        private fun defaultClient() = OkHttpClient.Builder().connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(180, TimeUnit.SECONDS).callTimeout(240, TimeUnit.SECONDS)
+            .followRedirects(false).followSslRedirects(false).build()
     }
 }

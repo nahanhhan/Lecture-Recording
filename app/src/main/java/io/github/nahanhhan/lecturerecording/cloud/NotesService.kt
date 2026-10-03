@@ -38,7 +38,7 @@ class NotesService : Service() {
                 check(graph.settings.cloudTested) { "请先在设置中测试云端接口" }
                 val job = graph.lessonOperations.withLock {
                     val value = intent?.getStringExtra("job_id")?.let { requireNotNull(graph.dao.job(it)) { "整理任务已删除" } }
-                        ?: createJob(requireNotNull(intent?.getStringExtra("lesson_id")))
+                        ?: createJob(requireNotNull(intent?.getStringExtra("lesson_id")), settings.includePhotos)
                     check(graph.dao.lesson(value.lessonId) != null) { "录音记录已删除" }
                     currentJobId = value.id
                     graph.cloudLessonId.value = value.lessonId
@@ -59,15 +59,16 @@ class NotesService : Service() {
         }
         return START_NOT_STICKY
     }
-    private suspend fun createJob(lessonId: String): JobEntity = graph.database.withTransaction {
+    private suspend fun createJob(lessonId: String, includePhotos: Boolean): JobEntity = graph.database.withTransaction {
         val lesson = requireNotNull(graph.dao.lesson(lessonId))
         check(lesson.status !in setOf("recording", "paused", "processing")) { "请等待录音和实时转写结束" }
         val segments = graph.dao.segments(lessonId).map { Segment(it.id, it.startMs, it.endMs,
             if (it.text.isBlank()) "【待核对：此段转写未完成】" else it.text) }
         val photos = graph.dao.photos(lessonId).filter { it.selected }.map { Photo(it.id, it.filename, it.audioTimeMs) }
         val batches = BatchPlanner.plan(lessonId, lesson.revision, lesson.course,
-            graph.settings.glossary.split(',', '，', '\n').map { it.trim() }.filter { it.isNotBlank() }, segments, photos)
-        check(batches.isNotEmpty()) { "没有可整理的文字或照片" }
+            graph.settings.glossary.split(',', '，', '\n').map { it.trim() }.filter { it.isNotBlank() }, segments, photos,
+            includePhotos = includePhotos)
+        check(batches.isNotEmpty()) { if (includePhotos) "没有可整理的文字或照片" else "没有可整理的文字；若需要整理照片，请在设置中开启并测试读图" }
         val job = JobEntity(UUID.randomUUID().toString(), lessonId, lesson.revision, protocolJson.encodeToString(batches), createdAt = System.currentTimeMillis())
         graph.dao.putJob(job)
         AppLog.i("NotesService", "创建整理任务 job=${job.id} 批次=${batches.size}")
@@ -75,6 +76,9 @@ class NotesService : Service() {
     }
     private suspend fun runJob(job: JobEntity, settings: CloudSettings) {
         val batches = protocolJson.decodeFromString<List<Batch>>(job.snapshotJson)
+        check(settings.includePhotos || batches.all { it.photos.isEmpty() }) {
+            "此任务包含照片，请开启并测试读图后继续，或发起新的文字整理任务"
+        }
         val definition = assets.open("tool-definition.json").bufferedReader().use { protocolJson.parseToJsonElement(it.readText()).jsonObject }
         val client = CloudClient(settings)
         graph.dao.jobStatus(job.id, "running")

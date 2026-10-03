@@ -2,11 +2,12 @@ package io.github.nahanhhan.lecture.core
 
 object BatchPlanner {
     fun plan(lessonId: String, revision: Int, course: String, glossary: List<String>,
-        segments: List<Segment>, photos: List<Photo>, maxChars: Int = 6000, maxPhotos: Int = 6): List<Batch> {
+        segments: List<Segment>, photos: List<Photo>, maxChars: Int = 6000, maxPhotos: Int = 6,
+        includePhotos: Boolean = true): List<Batch> {
         require(maxChars > 0 && maxPhotos > 0)
         data class Event(val time: Long, val segment: Segment? = null, val photo: Photo? = null)
         val events = segments.flatMap { s -> s.text.chunked(maxChars).map { Event(s.startMs, s.copy(text = it)) } } +
-            photos.map { Event(it.audioTimeMs, photo = it) }
+            (if (includePhotos) photos.map { Event(it.audioTimeMs, photo = it) } else emptyList())
         val result = mutableListOf<Batch>()
         val currentSegments = mutableListOf<Segment>()
         val currentPhotos = mutableListOf<Photo>()
