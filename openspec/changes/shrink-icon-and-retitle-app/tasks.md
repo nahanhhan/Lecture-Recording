@@ -2,8 +2,8 @@
 
 ## 1. 图标几何缩放（矢量资产）
 
-- [ ] 1.1 按 [design.md](design.md) 参数（s ≈ 0.74256，t ≈ (164.4, 164.1)，±1 视口单位容差）用 `<group>` 包裹 [`ic_launcher_foreground.xml`](../../../../app/src/main/res/drawable/ic_launcher_foreground.xml) 的七条图形路径。验证：XML 可解析；七条 pathData 与改前逐字一致、仅新增 group 包裹；group 数值与 design.md 一致
-- [ ] 1.2 同一变换参数包裹旧式 [`mipmap-anydpi/ic_launcher.xml`](../../../../app/src/main/res/mipmap-anydpi/ic_launcher.xml) 与 [`mipmap-anydpi/ic_launcher_round.xml`](../../../../app/src/main/res/mipmap-anydpi/ic_launcher_round.xml) 的图形路径（全幅白色背景路径留在组外）。验证：两文件 group 参数与 1.1 完全一致；背景路径坐标不变
+- [x] 1.1 按 [design.md](design.md) 参数（s ≈ 0.74256，t ≈ (164.4, 164.1)，±1 视口单位容差）用 `<group>` 包裹 [`ic_launcher_foreground.xml`](../../../../app/src/main/res/drawable/ic_launcher_foreground.xml) 的七条图形路径。验证：XML 可解析；七条 pathData 与改前逐字一致、仅新增 group 包裹；group 数值与 design.md 一致
+- [x] 1.2 同一变换参数包裹旧式 [`mipmap-anydpi/ic_launcher.xml`](../../../../app/src/main/res/mipmap-anydpi/ic_launcher.xml) 与 [`mipmap-anydpi/ic_launcher_round.xml`](../../../../app/src/main/res/mipmap-anydpi/ic_launcher_round.xml) 的图形路径（全幅白色背景路径留在组外）。验证：两文件 group 参数与 1.1 完全一致；背景路径坐标不变
 - [ ] 1.3 用 `<g transform="translate(...) scale(...)">` 包裹 [`artwork/app-icon.svg`](../../../../artwork/app-icon.svg) 的同一组七条路径，背景 `<use>` 不动。验证：SVG 可解析；变换参数与 1.1 同源对应
 - [ ] 1.4 按同一几何参数重新生成 [`artwork/app-icon-preview.png`](../../../../artwork/app-icon-preview.png)（渲染 SVG，或一次性 Pillow 脚本解析绘制七形状，脚本不入库）。验证：图形外框长边占画布 50%（±1%）、四边留白对称；肉眼核对与矢量资产一致
 - [ ] 1.5 本批验收：在 `verification/checks` 执行 `uv run python -m checks` 全绿，推送后 CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过（工程验证口径，不含真机发布验收）
