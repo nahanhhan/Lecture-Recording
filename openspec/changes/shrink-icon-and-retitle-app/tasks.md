@@ -10,9 +10,9 @@
 
 ## 2. 软件名称统一「录课」
 
-- [ ] 2.1 将 [`AndroidManifest.xml`](../../../../app/src/main/AndroidManifest.xml) 的 `android:label` 改为「录课」。验证：manifest 中不再含「课堂录音笔」，diff 仅该字符串
-- [ ] 2.2 将 [`MainActivity.kt`](../../../../app/src/main/java/io/github/nahanhhan/lecturerecording/MainActivity.kt) 首页顶栏标题改为「录课」，设置页「设置」与详情页「课堂记录」保持不变。验证：diff 仅一处字符串字面量
-- [ ] 2.3 将 [`RecordingService.kt`](../../../../app/src/main/java/io/github/nahanhhan/lecturerecording/recording/RecordingService.kt) 通知标题改为「录课」。验证：diff 仅一处字符串字面量；全仓搜索「课堂录音笔」仅剩 [`IMPLEMENTATION_PLAN.md`](../../../../IMPLEMENTATION_PLAN.md) 等历史文档
+- [x] 2.1 将 [`AndroidManifest.xml`](../../../../app/src/main/AndroidManifest.xml) 的 `android:label` 改为「录课」。验证：manifest 中不再含「课堂录音笔」，diff 仅该字符串
+- [x] 2.2 将 [`MainActivity.kt`](../../../../app/src/main/java/io/github/nahanhhan/lecturerecording/MainActivity.kt) 首页顶栏标题改为「录课」，设置页「设置」与详情页「课堂记录」保持不变。验证：diff 仅一处字符串字面量
+- [x] 2.3 将 [`RecordingService.kt`](../../../../app/src/main/java/io/github/nahanhhan/lecturerecording/recording/RecordingService.kt) 通知标题改为「录课」。验证：diff 仅一处字符串字面量；全仓搜索「课堂录音笔」仅剩 [`IMPLEMENTATION_PLAN.md`](../../../../IMPLEMENTATION_PLAN.md) 等历史文档
 - [ ] 2.4 本批验收：在 `verification/checks` 执行 `uv run python -m checks` 全绿，推送后 CI（`:core:test`、`:app:lintDebug`、`:app:assembleDebug`）通过（工程验证口径）
 
 ## 3. 版本递增与文档同步
